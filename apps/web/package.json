@@ -1,0 +1,4 @@
+{
+  "name": "@and-there-was/web", "version": "0.1.0", "private": true, "type": "module",
+  "dependencies": { "@and-there-was/scene": "0.1.0", "pixi.js": "8.23.0" }
+}
