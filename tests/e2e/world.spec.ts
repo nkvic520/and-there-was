@@ -3,11 +3,16 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
+import { createServer } from 'node:http';
+import { modelReply, streamReply } from '../helpers/interactive';
+import { Store } from '../../apps/server/src/store';
+import { addCalendarMonths } from '@and-there-was/scene';
 
 let server: ChildProcess, dataDirectory: string, serverLog = '';
+let modelEnvironment: Record<string, string> = {};
 async function start() {
   serverLog = '';
-  server = spawn(process.execPath, ['apps/server/dist/main.js'], { cwd: process.cwd(), env: { ...process.env, PORT: '3179', HOST: '127.0.0.1', DATA_DIR: dataDirectory }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  server = spawn(process.execPath, ['apps/server/dist/main.js'], { cwd: process.cwd(), env: { ...process.env, PORT: '3179', HOST: '127.0.0.1', DATA_DIR: dataDirectory, GENERATOR_MODE: 'fixture', ...modelEnvironment }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
   server.stdout?.on('data', chunk => { serverLog += chunk; }); server.stderr?.on('data', chunk => { serverLog += chunk; });
   for (let i = 0; i < 100; i++) {
     if (server.exitCode !== null) throw new Error(serverLog);
@@ -143,4 +148,61 @@ test('plain LAN HTTP works without secure-context crypto APIs', async ({ page })
   await page.reload();
   await expect(page.locator('#app')).toHaveAttribute('data-version-id', version!);
   await expect(page.locator('#canvas')).toHaveAttribute('data-operation-count', '3');
+});
+
+test('DeepSeek transport, offline taps, lost acknowledgement, restart and protocol migration', async ({ page, context, browser, request }, info) => {
+  const calls: { snapshot: { state: { taps: number } }; request: string }[] = [];
+  const model = createServer(async (req, res) => {
+    const chunks = []; for await (const chunk of req) chunks.push(chunk);
+    const body = JSON.parse(Buffer.concat(chunks).toString()), input = JSON.parse(body.messages[1].content); calls.push(input);
+    res.writeHead(200, { 'Content-Type': 'text/event-stream' }); res.end(streamReply(await modelReply(input.request.includes('upgrade'))));
+  });
+  await new Promise<void>(resolve => model.listen(0, '127.0.0.1', resolve));
+  const address = model.address(); if (!address || typeof address === 'string') throw new Error('No model test port');
+  await stop(); modelEnvironment = { GENERATOR_MODE: 'deepseek', DEEPSEEK_API_KEY: 'mock-key', DEEPSEEK_BASE_URL: `http://127.0.0.1:${address.port}` }; await start();
+  try {
+    await page.goto('/'); await expect(page.locator('#app')).toHaveAttribute('data-revision', '0');
+    const worldUrl = page.url(), worldId = worldUrl.split('/').at(-1)!;
+    const submit = async (target: typeof page, text: string) => { await target.getByRole('textbox').fill(text); await target.getByRole('button', { name: '发送', exact: true }).click(); };
+    const tap = async (target: typeof page) => {
+      const box = (await target.locator('canvas').boundingBox())!, size = Math.min(box.width, box.height);
+      const x = box.x + (box.width - size) / 2 + .4 * size, y = box.y + (box.height - size) / 2 + .4 * size;
+      if (info.project.use.hasTouch) await target.touchscreen.tap(x, y); else await target.mouse.click(x, y);
+    };
+    await submit(page, '要有光'); await expect(page.locator('#app')).toHaveAttribute('data-revision', '1');
+    await submit(page, '碰三次出现一扇门'); await expect(page.locator('#app')).toHaveAttribute('data-revision', '2');
+    await context.setOffline(true);
+    await tap(page); await expect(page.locator('#app')).toHaveAttribute('data-pending-events', '1');
+    await tap(page); await expect(page.locator('#app')).toHaveAttribute('data-pending-events', '2');
+    expect((await (await request.get(`/api/worlds/${worldId}`)).json()).state.taps).toBe(0);
+    await page.route('**/api/worlds/*/interactions', async route => { await route.fetch(); await route.abort('failed'); }, { times: 1 });
+    await context.setOffline(false);
+    await expect(page.locator('#app')).toHaveAttribute('data-revision', '4');
+    await expect(page.locator('#app')).toHaveAttribute('data-pending-events', '0');
+    const saved = await (await request.get(`/api/worlds/${worldId}`)).json(); expect(saved.state).toEqual({ taps: 2, door: false });
+    await page.close(); await stop(); await start();
+    const fresh = await freshContext(browser, info.project.use), restored = await fresh.newPage();
+    await restored.goto(worldUrl); await expect(restored.locator('#app')).toHaveAttribute('data-version-id', saved.versionId);
+    await tap(restored); await expect(restored.locator('#app')).toHaveAttribute('data-revision', '5');
+    await expect(restored.locator('#canvas')).toHaveAttribute('data-operation-count', '2');
+    await submit(restored, 'upgrade'); await expect(restored.locator('#app')).toHaveAttribute('data-revision', '6');
+    const records = await (await request.get(`/api/worlds/${worldId}/records`)).json();
+    expect(records.snapshot.state).toEqual({ taps: 3, door: true, color: '#ffc233' }); expect(records.interactions).toHaveLength(3);
+    expect(calls).toHaveLength(3); expect(calls[2].snapshot.state.taps).toBe(3);
+    expect(records.chunks.length).toBeGreaterThan(0); expect(records.attempts.every((a: { generator_id: string }) => a.generator_id === 'deepseek/deepseek-flash')).toBe(true);
+    await restored.screenshot({ path: info.outputPath('interactive-door.png') });
+    await stop();
+    const expiredStore = new Store(dataDirectory);
+    try { expiredStore.prune(addCalendarMonths(new Date(), 4)); } finally { expiredStore.close(); }
+    await start();
+    await restored.goto(`/inspect/${worldId}`);
+    await restored.getByText('当前作品 · scene.js', { exact: true }).click();
+    await expect(restored.locator('details').filter({ has: restored.locator('summary').filter({ hasText: /^当前作品 · scene\.js$/ }) }).locator('pre')).toContainText('export function mount');
+    expect((await (await request.get(`/api/worlds/${worldId}/records`)).json()).attempts).toHaveLength(0);
+    await restored.goto(worldUrl); await expect(restored.locator('#app')).toHaveAttribute('data-version-id', records.snapshot.versionId);
+    await fresh.close();
+  } finally {
+    await context.setOffline(false); await stop(); modelEnvironment = {}; await start();
+    model.closeAllConnections(); await new Promise<void>(resolve => model.close(() => resolve()));
+  }
 });

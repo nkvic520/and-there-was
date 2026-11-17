@@ -3,27 +3,32 @@ import { sha256 as digest256 } from '@noble/hashes/sha2.js';
 
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type SceneState = { [key: string]: Json };
-export interface SceneProtocol { schemaVersion: 1; stateSchema: Record<string, Json>; events: Record<string, Json> }
+export interface SceneProtocol { schemaVersion: 1 | 2; stateSchema: Record<string, Json>; events: Record<string, Json> }
 export interface ScenePackage {
-  formatVersion: 1; sdkVersion: 1; entry: 'scene.js';
+  formatVersion: 1; sdkVersion: 1 | 2; entry: 'scene.js';
   files: Record<string, string>; hashes: Record<string, string>; assets: [];
 }
 export interface DrawOperation {
-  kind: 'circle' | 'ellipse'; id: string; x: number; y: number;
+  kind: 'circle' | 'ellipse' | 'rect'; id: string; x: number; y: number;
   radiusX: number; radiusY: number; color: string; alpha: number;
 }
-export interface TrialOutput { state: SceneState; operations: DrawOperation[]; durationMs: number; runtimeVersion: string }
+export interface EventBinding { targetId: string; event: string; payload: SceneState }
+export interface SceneEvent { name: string; payload: SceneState }
+export interface ExecutionOptions { event?: SceneEvent; migrate?: boolean; previousProtocol?: SceneProtocol }
+export interface TrialOutput { state: SceneState; operations: DrawOperation[]; bindings?: EventBinding[]; durationMs: number; runtimeVersion: string }
 export interface TrialResult {
   attemptId: string; packageHash: string; baseVersionId: string; baseRevision: number;
   ok: boolean; output?: TrialOutput; error?: string;
 }
 export interface WorldSnapshot {
   worldId: string; versionId: string; parentVersionId: string | null; revision: number;
-  packageHash: string | null; state: SceneState; operations: DrawOperation[]; createdAt: string;
+  packageHash: string | null; state: SceneState; operations: DrawOperation[]; bindings?: EventBinding[]; createdAt: string;
 }
+export interface InteractionReceipt { clientEventId: string; versionId: string; revision: number; targetId: string; output?: TrialOutput; error?: string }
 export interface Candidate {
   worldId: string; turnId: string; attemptId: string; packageHash: string;
   baseVersionId: string; baseRevision: number; baseline: WorldSnapshot; package: ScenePackage;
+  previousProtocol?: SceneProtocol;
 }
 export const LIMITS = { callMs: 500, memoryBytes: 16 * 1024 * 1024, operations: 1000, stateBytes: 128 * 1024, packageBytes: 256 * 1024, workerMs: 2500 } as const;
 export const RUNTIME_VERSION = 'quickjs-wasm-0.32.0/sdk-1';
@@ -43,6 +48,13 @@ export async function sha256(text: string): Promise<string> {
   return Array.from(digest256(new TextEncoder().encode(text)), b => b.toString(16).padStart(2, '0')).join('');
 }
 export const hashJson = (value: unknown) => sha256(canonical(value));
+export const runtimeVersion = (sdkVersion: number) => `quickjs-wasm-0.32.0/sdk-${sdkVersion}`;
+export function addCalendarMonths(value: Date, months: number): Date {
+  const result = new Date(value); const day = result.getUTCDate();
+  result.setUTCDate(1); result.setUTCMonth(result.getUTCMonth() + months);
+  const end = new Date(Date.UTC(result.getUTCFullYear(), result.getUTCMonth() + 1, 0)).getUTCDate();
+  result.setUTCDate(Math.min(day, end)); return result;
+}
 
 // A deliberately small, bounded JSON Schema subset. No references, regex, custom
 // keywords, recursive schemas, coercion or remote loading enter the validator.
@@ -65,10 +77,23 @@ function checkSchema(schema: unknown, depth = 0, budget = { nodes: 0 }): void {
 }
 const ajv = new Ajv({ strict: true, allErrors: false, validateFormats: false, addUsedSchema: false });
 export function validateProtocol(value: unknown): asserts value is SceneProtocol {
-  assert(record(value) && value.schemaVersion === 1 && record(value.events) && Object.keys(value.events).length === 0, 'Unsupported protocol/events');
+  assert(record(value) && (value.schemaVersion === 1 || value.schemaVersion === 2) && record(value.events) && Object.keys(value.events).length <= 32, 'Unsupported protocol/events');
+  if (value.schemaVersion === 1) assert(Object.keys(value.events).length === 0, 'SDK 1 does not support events');
   assert(utf8Size(JSON.stringify(value)) <= 32768, 'Protocol too large');
   checkSchema(value.stateSchema);
   assert(ajv.validateSchema(value.stateSchema as object), 'Invalid state schema');
+  for (const [name, schema] of Object.entries(value.events)) {
+    assert(/^[a-zA-Z][\w.-]{0,79}$/.test(name) && !['constructor', 'prototype', '__proto__'].includes(name), 'Invalid event name');
+    checkSchema(schema);
+    assert(record(schema) && schema.type === 'object' && ajv.validateSchema(schema), 'Invalid event schema');
+  }
+}
+export function validateEvent(protocol: SceneProtocol, event: SceneEvent) {
+  const schema = protocol.events[event.name];
+  assert(record(schema) && record(event.payload) && utf8Size(canonical(event.payload)) <= 4096, 'Unknown or invalid event');
+  const validate = ajv.compile(schema);
+  try { assert(validate(event.payload), `Invalid event payload: ${ajv.errorsText(validate.errors)}`); }
+  finally { ajv.removeSchema(schema); }
 }
 export function validateState(protocol: SceneProtocol, value: unknown): asserts value is SceneState {
   validateProtocol(protocol);
@@ -81,7 +106,7 @@ export function validateOperations(value: unknown): asserts value is DrawOperati
   assert(Array.isArray(value) && value.length <= LIMITS.operations, 'Operation limit exceeded');
   const ids = new Set<string>();
   for (const op of value) {
-    assert(record(op) && ['circle', 'ellipse'].includes(String(op.kind)), 'Unsupported operation');
+    assert(record(op) && ['circle', 'ellipse', 'rect'].includes(String(op.kind)), 'Unsupported operation');
     assert(typeof op.id === 'string' && /^[\w-]{1,80}$/.test(op.id) && !ids.has(op.id), 'Invalid/duplicate drawing id');
     ids.add(op.id);
     for (const field of ['x', 'y', 'radiusX', 'radiusY', 'alpha']) assert(typeof op[field] === 'number' && Number.isFinite(op[field]) && op[field] >= 0 && op[field] <= 1, `Invalid ${field}`);
@@ -91,13 +116,24 @@ export function validateOperations(value: unknown): asserts value is DrawOperati
   }
 }
 export function validateOutput(protocol: SceneProtocol, output: unknown): asserts output is TrialOutput {
-  assert(record(output) && output.runtimeVersion === RUNTIME_VERSION, 'Runtime version mismatch');
+  assert(record(output) && output.runtimeVersion === runtimeVersion(protocol.schemaVersion), 'Runtime version mismatch');
   assert(typeof output.durationMs === 'number' && Number.isFinite(output.durationMs) && output.durationMs >= 0, 'Invalid duration');
   validateState(protocol, output.state);
   validateOperations(output.operations);
+  if (protocol.schemaVersion === 2) {
+    assert(Array.isArray(output.bindings) && output.bindings.length <= 1000, 'Invalid event bindings');
+    const ids = new Set<string>();
+    for (const binding of output.bindings) {
+      assert(record(binding) && typeof binding.targetId === 'string' && typeof binding.event === 'string' && record(binding.payload), 'Invalid binding');
+      assert(Object.keys(binding).length === 3, 'Unexpected event binding fields');
+      assert(!ids.has(binding.targetId), `Duplicate binding target: ${binding.targetId}`);
+      assert(output.operations.some(op => op.id === binding.targetId), `Binding target was not drawn in this mount: ${binding.targetId}`);
+      ids.add(binding.targetId); validateEvent(protocol, { name: binding.event, payload: binding.payload as SceneState });
+    }
+  } else assert(output.bindings === undefined && output.operations.every(op => op.kind !== 'rect'), 'SDK 1 capability mismatch');
 }
 export async function validatePackage(value: unknown): Promise<SceneProtocol> {
-  assert(record(value) && value.formatVersion === 1 && value.sdkVersion === 1 && value.entry === 'scene.js', 'Unsupported package or SDK');
+  assert(record(value) && value.formatVersion === 1 && (value.sdkVersion === 1 || value.sdkVersion === 2) && value.entry === 'scene.js', 'Unsupported package or SDK');
   assert(record(value.files) && record(value.hashes) && Array.isArray(value.assets) && value.assets.length === 0, 'Invalid files/assets');
   assert(utf8Size(canonical(value)) <= LIMITS.packageBytes, 'Package too large');
   const names = ['protocol.json', 'scene.js', 'view.json'];
@@ -108,7 +144,8 @@ export async function validatePackage(value: unknown): Promise<SceneProtocol> {
   }
   const protocol: unknown = JSON.parse(value.files['protocol.json'] as string);
   validateProtocol(protocol);
+  assert(protocol.schemaVersion === value.sdkVersion, 'Protocol and SDK version mismatch');
   const view = JSON.parse(value.files['view.json'] as string);
-  assert(record(view) && view.coordinates === 'normalized' && view.background === '#ffffff', 'Unsupported view');
+  assert(record(view) && view.coordinates === 'normalized' && typeof view.background === 'string' && /^#[0-9a-f]{6}$/i.test(view.background) && (value.sdkVersion === 2 || view.background === '#ffffff'), 'Unsupported view');
   return protocol;
 }

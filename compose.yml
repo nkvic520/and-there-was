@@ -7,6 +7,11 @@ services:
       HOST: "0.0.0.0"
       PORT: "3000"
       DATA_DIR: /data
+      GENERATOR_MODE: ${GENERATOR_MODE:-fixture}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-flash}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      ARCHIVE_RETENTION_MONTHS: "3"
     volumes:
       - world-data:/data
     restart: unless-stopped
