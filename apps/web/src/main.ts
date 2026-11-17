@@ -158,7 +158,8 @@ async function playground() {
       } else if (event.kind === 'version.committed' || event.kind === 'interaction.committed') {
         const snapshot = await api<WorldSnapshot>(`/api/worlds/${localWorldId}`);
         if (snapshot.versionId !== current.versionId) await applySnapshot(snapshot);
-        status.textContent = ''; failedTurn = undefined; retry.hidden = true;
+        // Playing the existing scene must not dismiss a failed generation's retry.
+        if (event.kind === 'version.committed') { status.textContent = ''; failedTurn = undefined; retry.hidden = true; }
       } else if (event.kind === 'attempt.failed') {
         const records = await api<{ turns: { id: string; status: string }[] }>(`/api/worlds/${localWorldId}/activity`);
         if (records.turns.find(t => t.id === event.payload.turnId)?.status === 'failed') {

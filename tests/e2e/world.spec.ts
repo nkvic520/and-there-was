@@ -152,10 +152,13 @@ test('plain LAN HTTP works without secure-context crypto APIs', async ({ page })
 
 test('DeepSeek transport, offline taps, lost acknowledgement, restart and protocol migration', async ({ page, context, browser, request }, info) => {
   const calls: { snapshot: { state: { taps: number } }; request: string }[] = [];
+  let failureSent = false;
   const model = createServer(async (req, res) => {
     const chunks = []; for await (const chunk of req) chunks.push(chunk);
     const body = JSON.parse(Buffer.concat(chunks).toString()), input = JSON.parse(body.messages[1].content); calls.push(input);
-    res.writeHead(200, { 'Content-Type': 'text/event-stream' }); res.end(streamReply(await modelReply(input.request.includes('upgrade'))));
+    res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+    if (input.request === 'bad upgrade' && !failureSent) { failureSent = true; res.end(streamReply('{malformed')); }
+    else res.end(streamReply(await modelReply(input.request.includes('upgrade'))));
   });
   await new Promise<void>(resolve => model.listen(0, '127.0.0.1', resolve));
   const address = model.address(); if (!address || typeof address === 'string') throw new Error('No model test port');
@@ -191,6 +194,16 @@ test('DeepSeek transport, offline taps, lost acknowledgement, restart and protoc
     expect(calls).toHaveLength(3); expect(calls[2].snapshot.state.taps).toBe(3);
     expect(records.chunks.length).toBeGreaterThan(0); expect(records.attempts.every((a: { generator_id: string }) => a.generator_id === 'deepseek/deepseek-flash')).toBe(true);
     await restored.screenshot({ path: info.outputPath('interactive-door.png') });
+    await submit(restored, 'bad upgrade');
+    await expect(restored.getByRole('button', { name: '再试一次' })).toBeVisible();
+    await tap(restored); await expect(restored.locator('#app')).toHaveAttribute('data-revision', '7');
+    // The old scene is still playable, and playing it must leave the retry available.
+    await expect(restored.getByRole('button', { name: '再试一次' })).toBeVisible();
+    await restored.getByRole('button', { name: '再试一次' }).click();
+    await expect(restored.locator('#app')).toHaveAttribute('data-revision', '8');
+    const retried = await (await request.get(`/api/worlds/${worldId}/records`)).json();
+    expect(retried.snapshot.state).toEqual({ taps: 4, door: true, color: '#ffc233' });
+    expect(retried.attempts.slice(-2).map((a: { status: string }) => a.status)).toEqual(['failed', 'committed']);
     await stop();
     const expiredStore = new Store(dataDirectory);
     try { expiredStore.prune(addCalendarMonths(new Date(), 4)); } finally { expiredStore.close(); }
@@ -199,7 +212,7 @@ test('DeepSeek transport, offline taps, lost acknowledgement, restart and protoc
     await restored.getByText('当前作品 · scene.js', { exact: true }).click();
     await expect(restored.locator('details').filter({ has: restored.locator('summary').filter({ hasText: /^当前作品 · scene\.js$/ }) }).locator('pre')).toContainText('export function mount');
     expect((await (await request.get(`/api/worlds/${worldId}/records`)).json()).attempts).toHaveLength(0);
-    await restored.goto(worldUrl); await expect(restored.locator('#app')).toHaveAttribute('data-version-id', records.snapshot.versionId);
+    await restored.goto(worldUrl); await expect(restored.locator('#app')).toHaveAttribute('data-version-id', retried.snapshot.versionId);
     await fresh.close();
   } finally {
     await context.setOffline(false); await stop(); modelEnvironment = {}; await start();
