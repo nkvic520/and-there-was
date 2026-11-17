@@ -10,6 +10,7 @@
     "dev": "concurrently --kill-others --names api,web \"tsx watch apps/server/src/main.ts\" \"vite --config apps/web/vite.config.ts\"",
     "build": "node scripts/build.mjs",
     "start": "node --env-file-if-exists=.env apps/server/dist/main.js",
+    "start:lan": "node --env-file-if-exists=.env scripts/start-lan.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "check": "npm run typecheck && npm test",

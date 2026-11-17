@@ -146,7 +146,8 @@ async function playground() {
     event.preventDefault();
     if (composing || !input.value.trim()) return;
     if (localStorage.getItem(outboxKey)) { status.textContent = '上一句话还在发送，请稍等一下。'; return; }
-    localStorage.setItem(outboxKey, JSON.stringify({ text: input.value, clientSubmissionId: crypto.randomUUID() }));
+    const clientSubmissionId = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
+    localStorage.setItem(outboxKey, JSON.stringify({ text: input.value, clientSubmissionId }));
     status.textContent = '收到啦，等一下…'; input.value = ''; send.disabled = true; retry.hidden = true;
     void flushSubmission().catch(() => { status.textContent = '这句话已经记住，连上后会继续发送。'; });
   });

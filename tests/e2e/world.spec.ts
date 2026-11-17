@@ -130,3 +130,17 @@ test('candidate stays invisible until commit; lost trial acknowledgement does no
   const records = await (await request.get(`/api/worlds/${worldId}/records`)).json();
   expect(records.versions).toHaveLength(2); expect(records.attempts).toHaveLength(1);
 });
+
+test('plain LAN HTTP works without secure-context crypto APIs', async ({ page }) => {
+  await page.goto('http://lan.test:3179/');
+  await expect(page.locator('#app')).toHaveAttribute('data-revision', '0');
+  expect(await page.evaluate(() => window.isSecureContext)).toBe(false);
+  expect(await page.evaluate(() => typeof crypto.subtle)).toBe('undefined');
+  await page.getByRole('textbox').fill('有一个球');
+  await page.getByRole('button', { name: '发送', exact: true }).click();
+  await expect(page.locator('#app')).toHaveAttribute('data-revision', '1');
+  const version = await page.locator('#app').getAttribute('data-version-id');
+  await page.reload();
+  await expect(page.locator('#app')).toHaveAttribute('data-version-id', version!);
+  await expect(page.locator('#canvas')).toHaveAttribute('data-operation-count', '3');
+});

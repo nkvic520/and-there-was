@@ -24,6 +24,8 @@ npm start
 
 打开 <http://127.0.0.1:3000>。配置见 [.env.example](.env.example)。`npm start` 自动读取根目录 `.env`。开发模式可直接通过环境变量设置 `DATA_DIR` / `PORT`（改 API 端口时也需调整 Vite 代理）。
 
+同一可信局域网的手机试玩，构建后运行 `npm run start:lan`，在手机浏览器输入终端打印的电脑 WLAN/以太网地址，例如 `http://<电脑局域网IP>:3000/`。此模式监听所有网卡，仅用于你信任的局域网；默认 `npm start` 仍只监听本机。页面在普通局域网 HTTP 下也能完成哈希校验和生成，不依赖仅限 HTTPS/localhost 的浏览器加密接口。
+
 ## 查看和恢复
 
 打开首页会创建一个空世界，并自动变成 `/w/<世界ID>`。**保留这个完整 URL**，重启后打开它会恢复同一世界。首页 `/` 总是新建一个空世界。
@@ -58,7 +60,7 @@ npm run test:container
 
 Compose 只绑定本机 3000 端口。Codespaces 使用开发容器，运行 `npm run dev` 后只转发 5173，保持端口 **Private**。前端、API 和 WASM 从同一个转发地址访问。CI 同时检查 Windows、Linux 和全栈容器。
 
-当前是单实例、单所有者的私有试玩版本，没有应用内账号系统。只在本机或私有 Codespaces 使用；公网自部署需先配置 HTTPS 和身份访问控制。源码公开不代表档案公开。
+当前是单实例、单所有者的私有试玩版本，没有应用内账号系统。用于本机、可信局域网或私有 Codespaces；公网自部署需先配置 HTTPS 和身份访问控制。源码公开不代表档案公开。
 
 ## 当前边界
 
@@ -67,6 +69,6 @@ Compose 只绑定本机 3000 端口。Codespaces 使用开发容器，运行 `np
 - 试跑结果在服务端二次校验并提交后才显示；保存后校验失败会保留旧场景。恢复时重新加载对应脚本，重建的状态和绘图必须与已保存快照一致。
 - 试跑回执来自私有实例的可信宿主，不作为面向不可信多用户的远程执行证明。
 - 真实模型、连续生成新玩法、互动、迁移、撤销、完整导出和作品发布尚未实现。
-- Android 实机、系统级中文输入法与离线听写须单独实测，浏览器模拟不能代替。
+- REDMI Turbo 4 的 Edge 已由用户实测输入、选字、触摸发送和重启恢复。Android Chrome、Windows 系统级中文输入法与离线听写尚未实测；浏览器模拟不能代替。
 
 需求依据：[项目架构与需求说明](docs/and-there-was-architecture-and-requirements.md) · [GitHub 开发说明](docs/and-there-was-github-development-guide.md)。开源许可：[MIT](LICENSE)。

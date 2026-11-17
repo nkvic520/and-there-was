@@ -1,4 +1,5 @@
 import Ajv from 'ajv';
+import { sha256 as digest256 } from '@noble/hashes/sha2.js';
 
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type SceneState = { [key: string]: Json };
@@ -38,8 +39,8 @@ export function canonical(value: unknown): string {
   return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}`;
 }
 export async function sha256(text: string): Promise<string> {
-  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-  return Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2, '0')).join('');
+  // Plain HTTP on a trusted LAN has no SubtleCrypto, including in workers.
+  return Array.from(digest256(new TextEncoder().encode(text)), b => b.toString(16).padStart(2, '0')).join('');
 }
 export const hashJson = (value: unknown) => sha256(canonical(value));
 
