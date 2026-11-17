@@ -37,9 +37,7 @@ SDK 2 另外提供 `rect(id,x,y,width,height,color,alpha)` 和 `onTap(drawnId,ev
 
 每次执行创建独立 QuickJS VM，预算 500ms、堆 16MiB、栈 256KiB、绘图及绑定各最多 1,000 条。浏览器保留已加载的 Worker/WASM 引擎以支持断网后的本地互动，VM 不跨调用复用；外层 Worker 有启动及单次调用终止计时器。
 
-## 真实模型与归档
-
-### SDK 3 画面与动画
+## SDK 3 画面与动画
 
 `sdk.node({id,kind,x,y,width,height,color,...})` 支持 circle、ellipse、rect、path、text、group。位置指节点中心，世界左上 `(0,0)`、右下 `(1,1)`；width/height 是完整尺寸。父节点必须是本次 mount 中的 group，子节点坐标是相对父节点的世界单位偏移。ID 跨轮次稳定，渲染器按 ID 保留显示对象，变更位置平滑过渡，新对象淡入或弹入。
 
@@ -50,6 +48,8 @@ SDK 2 另外提供 `rect(id,x,y,width,height,color,alpha)` 和 `onTap(drawnId,ev
 节点上的 `motionKey`（最多 80 字符）变化时重置该节点轨道，例如 `motionKey:String(state.taps)` 让每次点击都重新跳跃。它不能放入轨道内部。宿主保存 `cues:{[nodeId]:{key,startMs}}` 和有效播放时间，恢复相同关键帧。服务端校验 cue 对应当前操作、数量不超过 64、起点不晚于播放时间。过期版本拒绝写入，较早时间的回执忽略；每两秒及关键动作保存一次。突然断电或离线时最多只能恢复已送达的检查点。
 
 静态绘本必须无事件、无绑定、无动作和入场效果。页面按整个内容边界缩放，以免手机裁切页边；平时停止 ticker，只在变化和调整尺寸时重绘。动态时间在隐藏标签页或暂停时不推进，系统减少动态效果偏好默认暂停。不新增定时器、浏览器能力或脚本逐帧入口。
+
+## 真实模型与归档
 
 `GENERATOR_MODE=deepseek` 使用服务器密钥调用 `/chat/completions`。请求指定 JSON 输出、SSE 流、非思考模式，输出预算 16,384 tokens；原始 SSE 上限 8MiB、生成文本上限 192KiB、最终包上限 256KiB。请求正文、提示词版本、响应 ID、原始 SSE、片段、结束原因和用量均被归档，Authorization 不写入档案。只有完整结束且可解析的输出才能成为候选。上游错误、截断流、解析失败仍保留已收到的内容。
 

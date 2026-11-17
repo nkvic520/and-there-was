@@ -116,6 +116,13 @@ export class Store {
     this.db.prepare('INSERT INTO playback(world_id,package_hash,elapsed_ms,paused,cues) VALUES (?,?,?,?,?) ON CONFLICT(world_id) DO UPDATE SET package_hash=excluded.package_hash,elapsed_ms=excluded.elapsed_ms,paused=excluded.paused,cues=excluded.cues').run(worldId, snapshot.packageHash, elapsedMs, Number(paused),canonical(cues));
     return this.playback(worldId);
   }
+  alignPlayback(snapshot: WorldSnapshot) {
+    // Superseded animation keys are not part of the current work's retained data.
+    this.db.prepare('DELETE FROM playback WHERE world_id=? AND package_hash<>?').run(snapshot.worldId,snapshot.packageHash);
+    const saved = this.playback(snapshot.worldId);
+    const cues = Object.fromEntries(Object.entries(saved.cues).filter(([id,cue])=>snapshot.operations.some(op=>op.id===id && op.motionKey===cue.key)));
+    if (canonical(cues) !== canonical(saved.cues)) this.db.prepare('UPDATE playback SET cues=? WHERE world_id=?').run(canonical(cues),snapshot.worldId);
+  }
   turn(id: string): TurnRow {
     const row = this.db.prepare('SELECT * FROM turns WHERE id=?').get(id) as TurnRow | undefined;
     if (!row) throw new HttpError(404, 'Turn not found');

@@ -176,6 +176,7 @@ export class WorldService {
   private saveSnapshot(snapshot: WorldSnapshot) {
     this.store.db.prepare('INSERT INTO versions(id,world_id,snapshot,expires_at) VALUES (?,?,?,?)').run(snapshot.versionId, snapshot.worldId, canonical(snapshot), this.store.expiryForWorld(snapshot.worldId));
     this.store.db.prepare('UPDATE worlds SET current_version=?,revision=? WHERE id=?').run(snapshot.versionId, snapshot.revision, snapshot.worldId);
+    this.store.alignPlayback(snapshot);
   }
   async interact(worldId: string, receipt: InteractionReceipt): Promise<WorldSnapshot | { failed: true }> {
     if (!/^[\w-]{8,100}$/.test(receipt.clientEventId)) throw new HttpError(400, 'Invalid interaction id');

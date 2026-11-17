@@ -7,7 +7,7 @@ import { addCalendarMonths, canonical, sha256, type Candidate, type WorldSnapsho
 import { createEngine, executePackage } from '@and-there-was/scene/sandbox';
 import { createApp } from '../../apps/server/src/app';
 import type { Generator, GenerationContext } from '../../apps/server/src/generator';
-import { interactivePackage } from '../helpers/interactive';
+import { interactivePackage, animatedReply } from '../helpers/interactive';
 
 let engine: Awaited<ReturnType<typeof createEngine>>;
 let instances: Awaited<ReturnType<typeof createApp>>[] = [], directories: string[] = [];
@@ -60,6 +60,25 @@ it('rebases a candidate onto interactions that occurred during generation withou
   const rebased = s.service.candidate(c.attemptId); expect(rebased.packageHash).toBe(c.packageHash);
   const saved = await s.service.trial(await receipt(rebased)) as WorldSnapshot;
   expect(saved.state.taps).toBe(1); expect(saved.state.color).toBe('#ffc233');
+});
+it('keeps playback only for the current package and current motion keys', async () => {
+  const s=await setup(undefined,{id:'deepseek/animation-test',generate:async text=>{
+    const value=JSON.parse(await animatedReply());
+    const files={'protocol.json':JSON.stringify(value.protocol),'scene.js':value.script+(text==='upgrade'?'\n// changed package':''),'view.json':JSON.stringify(value.view)};
+    const hashes:Record<string,string>={};for(const [name,content] of Object.entries(files))hashes[name]=await sha256(content);
+    return {formatVersion:1,sdkVersion:3,entry:'scene.js',assets:[],files,hashes};
+  }});
+  const world=s.store.createWorld('animated');
+  let state=await s.service.trial(await receipt(await candidate(s,world.worldId))) as WorldSnapshot;
+  s.store.savePlayback(world.worldId,state.versionId,1000,false,{actor:{key:'0',startMs:100}});
+  const pkg=s.store.json<Awaited<ReturnType<typeof interactivePackage>>>(state.packageHash!);
+  const output=await executePackage(engine,pkg,state.state,{event:{name:'light.tapped',payload:{}}});
+  state=await s.service.interact(world.worldId,{clientEventId:randomUUID(),versionId:state.versionId,revision:state.revision,targetId:'actor',output}) as WorldSnapshot;
+  expect(s.store.playback(world.worldId)).toMatchObject({elapsedMs:1000,cues:{}});
+  s.store.savePlayback(world.worldId,state.versionId,1200,true,{actor:{key:'1',startMs:1000}});
+  state=await s.service.trial(await receipt(await candidate(s,world.worldId,'upgrade'))) as WorldSnapshot;
+  expect(s.store.playback(world.worldId)).toEqual({packageHash:state.packageHash,elapsedMs:0,paused:false,cues:{}});
+  expect(s.store.db.prepare('SELECT count(*) AS n FROM playback WHERE world_id=?').get(world.worldId)).toEqual({n:0});
 });
 it('rolls back a failed event, archives its diagnostic, and rejects stale event output', async () => {
   const s = await setup(), world = s.store.createWorld();

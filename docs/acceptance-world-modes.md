@@ -1,6 +1,6 @@
 # 0.3 两种世界与画面动画验收
 
-日期：2026-11-17。代码分支 `feat/animated-storybook-worlds`，建立在尚未合并的 [PR #4](https://github.com/nkvic520/and-there-was/pull/4) 上；任务 [#5](https://github.com/nkvic520/and-there-was/issues/5)。本阶段不创建 Codespaces、公开演示或 Release。
+日期：2026-11-17。代码分支 `feat/animated-storybook-worlds`，[PR #6](https://github.com/nkvic520/and-there-was/pull/6) 建立在尚未合并的 [PR #4](https://github.com/nkvic520/and-there-was/pull/4) 上；任务 [#5](https://github.com/nkvic520/and-there-was/issues/5)。本阶段不创建 Codespaces、公开演示或 Release。
 
 ## 交付范围
 
@@ -12,7 +12,7 @@
 
 ## 自动检查
 
-本机环境：Windows、Node 24.11.1、npm 11.6.2。`npm run check` 通过 TypeScript 与 **45 项测试**；`npm run build` 通过；`npm run test:e2e` **27/27 通过**。
+本机环境：Windows、Node 24.11.1、npm 11.6.2。`npm run check` 通过 TypeScript 与 **46 项测试**；`npm run build` 通过；`npm run test:e2e` **27/27 通过**（代码提交 `530ca60`）。随后增加旧动画起点清理及对应测试，追加 Edge 点击动作／重启恢复回归通过；最终提交的完整检查见 PR 的 Actions。
 
 | 浏览器 | 用例 | 实测 |
 | --- | --- | --- |
@@ -24,7 +24,7 @@
 
 球样例从发送至本地反馈为 39–42ms，从发送至提交后的画布可辨认为 347–394ms。这是本机确定性样例的自动测试计时，不是真实模型延迟。完整截图、浏览器信息与每次计时在被忽略的 `test-results/` 中。
 
-容器用例已扩展到旧样例、动态和绘本三个世界，复用持久卷重启，并比较快照、绘图和播放进度。GitHub Actions 状态在最终检查后补充。
+容器用例已扩展到旧样例、动态和绘本三个世界，复用持久卷重启，并比较快照、绘图和播放进度。`530ca60` 的 Linux 与容器检查已通过；最终提交及 Windows 的完整结果以 [PR #6 检查页](https://github.com/nkvic520/and-there-was/pull/6/checks) 对应 SHA 为准，PR 描述记录最终结果。
 
 ## 真实 DeepSeek
 
