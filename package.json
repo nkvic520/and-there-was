@@ -1,0 +1,31 @@
+{
+  "name": "and-there-was",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=24.11.1 <25" },
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "concurrently --kill-others --names api,web \"tsx watch apps/server/src/main.ts\" \"vite --config apps/web/vite.config.ts\"",
+    "build": "node scripts/build.mjs",
+    "start": "node --env-file-if-exists=.env apps/server/dist/main.js",
+    "start:lan": "node --env-file-if-exists=.env scripts/start-lan.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm test",
+    "test:e2e": "playwright test",
+    "test:container": "node scripts/container-smoke.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.1",
+    "@types/better-sqlite3": "9.6.0",
+    "@types/node": "24.10.1",
+    "concurrently": "10.0.7",
+    "esbuild": "0.28.2",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vite": "8.3.8",
+    "vitest": "5.1.0"
+  }
+}

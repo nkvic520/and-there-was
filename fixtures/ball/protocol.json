@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "stateSchema": {
+    "type": "object", "title": "BallScene", "additionalProperties": false, "required": ["ball"],
+    "properties": {
+      "ball": {
+        "type": "object", "title": "Ball", "additionalProperties": false,
+        "required": ["id", "type", "x", "y", "radius", "color"],
+        "properties": {
+          "id": {"type":"string","const":"ball-1"},
+          "type": {"type":"string","const":"Ball"},
+          "x": {"type":"number","minimum":0.1,"maximum":0.9},
+          "y": {"type":"number","minimum":0.1,"maximum":0.8},
+          "radius": {"type":"number","minimum":0.02,"maximum":0.2},
+          "color": {"type":"string","enum":["#4385f5"]}
+        }
+      }
+    }
+  },
+  "events": {}
+}

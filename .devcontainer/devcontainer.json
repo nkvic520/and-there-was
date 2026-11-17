@@ -1,0 +1,9 @@
+{
+  "name": "就有了 · Node 24",
+  "build": { "dockerfile": "Dockerfile" },
+  "remoteUser": "node",
+  "forwardPorts": [5173],
+  "portsAttributes": { "5173": { "label": "就有了", "onAutoForward": "notify" } },
+  "otherPortsAttributes": { "onAutoForward": "ignore" },
+  "postCreateCommand": "npm ci"
+}
