@@ -58,3 +58,11 @@ it('redacts a credential echoed across persisted stream fragment boundaries', as
   expect(t.chunks.join('')).toBe('x'.repeat(4090) + '[REDACTED]');
   expect(JSON.stringify(t.responses)).not.toContain('test-secret-token');
 });
+it('accepts bounded large SSE envelopes for illustrated scenes but rejects oversized generated content',async()=>{
+  const padding=': '+'.'.repeat(2100000)+'\n\n';
+  const generator=new DeepSeekGenerator({apiKey:'test-key',fetchImpl:async()=>new Response(padding+streamReply(await modelReply(false,'storybook')))});
+  const pkg=await generator.generate('漫画',{...baseline,mode:'storybook'});
+  expect(JSON.parse(pkg.files['protocol.json']).mode).toBe('storybook');
+  const tooLarge=new DeepSeekGenerator({apiKey:'test-key',fetchImpl:async()=>new Response(streamReply('x'.repeat(200000)))});
+  await expect(tooLarge.generate('漫画',baseline)).rejects.toThrow('content limit');
+});

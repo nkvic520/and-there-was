@@ -20,21 +20,29 @@ async function api(path, body) {
 try {
   docker('build', '-t', image, '.'); docker('volume', 'create', volume); volumeCreated = true;
   docker('run', '-d', '--name', container, '-p', '127.0.0.1:3180:3000', '-v', `${volume}:/data`, image); running = true; await ready();
-  const world = await api('/api/worlds', {}), turn = await api(`/api/worlds/${world.worldId}/turns`, { text: '有一个球', clientSubmissionId: randomUUID() });
+  const engine = await newQuickJSWASMModuleFromVariant(RELEASE_SYNC), savedWorlds = [];
+  for (const mode of [undefined, 'animated', 'storybook']) {
+  const world = await api('/api/worlds', mode ? {mode} : {}), turn = await api(`/api/worlds/${world.worldId}/turns`, { text: '有一个球', clientSubmissionId: randomUUID() });
   let attempt;
   for (let i = 0; i < 100; i++) { const records = await api(`/api/worlds/${world.worldId}/records`); attempt = records.attempts.find(a => a.turn_id === turn.id && a.status === 'trial'); if (attempt) break; await new Promise(r => setTimeout(r, 100)); }
   if (!attempt) throw new Error('No candidate');
-  const candidate = await api(`/api/attempts/${attempt.id}/candidate`), engine = await newQuickJSWASMModuleFromVariant(RELEASE_SYNC);
-  const output = await executePackage(engine, candidate.package, candidate.baseline.state);
+  const candidate = await api(`/api/attempts/${attempt.id}/candidate`);
+  const output = await executePackage(engine, candidate.package, candidate.baseline.state, {migrate:true});
   const snapshot = await api('/api/trials', { attemptId: candidate.attemptId, packageHash: candidate.packageHash, baseVersionId: candidate.baseVersionId, baseRevision: candidate.baseRevision, ok: true, output });
+  if (mode === 'animated') await api(`/api/worlds/${world.worldId}/playback`,{versionId:snapshot.versionId,elapsedMs:4321,paused:true});
+  savedWorlds.push({world,snapshot,output,mode,playback:await api(`/api/worlds/${world.worldId}/playback`)});
+  }
   docker('restart', container); await ready();
+  for (const {world,snapshot,output,mode,playback} of savedWorlds) {
   const restored = await api(`/api/worlds/${world.worldId}`);
   if (!isDeepStrictEqual(restored, snapshot)) throw new Error('Container restart changed the saved world');
+  if (!isDeepStrictEqual(await api(`/api/worlds/${world.worldId}/playback`),playback)) throw new Error('Playback did not restore');
   const response = await fetch(`http://127.0.0.1:3180/api/artifacts/${snapshot.packageHash}`);
   if (!response.ok) throw new Error('Saved package missing');
   const restoredOutput = await executePackage(engine, JSON.parse(await response.text()), restored.state);
-  if (!isDeepStrictEqual(restoredOutput.state, output.state)) throw new Error('Restored code/state mismatch');
-  console.log(JSON.stringify({ result: 'passed', worldId: world.worldId, versionId: snapshot.versionId, packageHash: snapshot.packageHash }));
+  if (!isDeepStrictEqual(restoredOutput.state, output.state) || !isDeepStrictEqual(restoredOutput.operations, output.operations)) throw new Error('Restored code/state mismatch');
+  console.log(JSON.stringify({ result: 'passed', mode:mode ?? 'legacy', worldId: world.worldId, versionId: snapshot.versionId, packageHash: snapshot.packageHash }));
+  }
 } finally {
   if (running) docker('rm', '-f', container);
   if (volumeCreated) docker('volume', 'rm', volume);

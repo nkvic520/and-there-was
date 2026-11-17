@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { canonical, validatePackage, validateOutput, type ScenePackage, type TrialResult, type Candidate, type WorldSnapshot, type InteractionReceipt } from '@and-there-was/scene';
+import { canonical, validatePackage, validateOutput, validateWorldMode, type ScenePackage, type TrialResult, type Candidate, type WorldSnapshot, type InteractionReceipt } from '@and-there-was/scene';
 import { Store, HttpError, now, type AttemptRow, type TurnRow } from './store';
 import { FixtureGenerator, type Generator } from './generator';
 
@@ -60,7 +60,8 @@ export class WorldService {
         const turn = this.store.db.prepare("SELECT * FROM turns WHERE world_id=? AND status='queued' ORDER BY seq LIMIT 1").get(worldId) as TurnRow | undefined;
         if (!turn) return;
         const baseline = this.store.world(worldId), attemptId = randomUUID();
-        const requestHash = this.store.putJson({ adapter: this.generator.id, promptVersion: 1, sdkVersion: 1, runtime: 'quickjs-wasm-0.32.0/sdk-1', text: turn.text, baseline, sdk: ['getState', 'setState', 'circle', 'ellipse'], instruction: 'Generate a closed state schema, a synchronous mount(sdk) module, and a normalized view.' });
+        const sdkVersion = baseline.mode ? 3 : 1;
+        const requestHash = this.store.putJson({ adapter: this.generator.id, sdkVersion, worldMode: baseline.mode ?? 'legacy', text: turn.text, baseline });
         this.store.db.transaction(() => {
           this.store.db.prepare("INSERT INTO attempts(id,turn_id,status,base_version,base_revision,request_hash,created_at,updated_at,generator_id) VALUES (?,?,'generating',?,?,?,?,?,?)").run(attemptId, turn.id, baseline.versionId, baseline.revision, requestHash, now(), now(), this.generator.id);
           this.store.db.prepare("UPDATE turns SET status='generating',attempt_id=? WHERE id=?").run(attemptId, turn.id);
@@ -92,7 +93,7 @@ export class WorldService {
           for (const [name, content] of Object.entries(pkg.files ?? {})) if (typeof content === 'string') this.store.put(content, name.endsWith('.json') ? 'application/json' : 'text/plain');
           const packageHash = this.store.putJson(pkg);
           this.store.db.prepare('UPDATE attempts SET package_hash=? WHERE id=?').run(packageHash, attemptId);
-          await validatePackage(pkg);
+          validateWorldMode(await validatePackage(pkg), baseline.mode);
           if (this.closed) return;
           this.store.db.transaction(() => {
             this.store.db.prepare("UPDATE attempts SET status='trial',updated_at=? WHERE id=?").run(now(), attemptId);
@@ -138,6 +139,7 @@ export class WorldService {
     try {
       const pkg = this.store.json<ScenePackage>(result.packageHash);
       const protocol = await validatePackage(pkg);
+      validateWorldMode(protocol, this.store.world(turn.world_id).mode);
       validateOutput(protocol, result.output);
       const resultHash = this.store.putJson(result);
       const committed = this.store.db.transaction(() => {
@@ -146,7 +148,7 @@ export class WorldService {
         if (latestAttempt.status === 'committed' && latestAttempt.committed_version) return this.store.version(latestAttempt.committed_version);
         const baseline = this.store.world(turn.world_id);
         if (latestAttempt.status !== 'trial' || baseline.versionId !== attempt.base_version || baseline.revision !== attempt.base_revision) throw new HttpError(409, 'Stale world baseline');
-        const snapshot: WorldSnapshot = { worldId: turn.world_id, versionId: randomUUID(), parentVersionId: baseline.versionId, revision: baseline.revision + 1, packageHash: result.packageHash, state: result.output!.state, operations: result.output!.operations, ...(result.output!.bindings ? { bindings: result.output!.bindings } : {}), createdAt: now() };
+        const snapshot: WorldSnapshot = { worldId: turn.world_id, versionId: randomUUID(), parentVersionId: baseline.versionId, revision: baseline.revision + 1, packageHash: result.packageHash, state: result.output!.state, operations: result.output!.operations, ...(baseline.mode ? { mode: baseline.mode } : {}), ...(result.output!.bindings ? { bindings: result.output!.bindings } : {}), createdAt: now() };
         this.saveSnapshot(snapshot);
         this.store.db.prepare("UPDATE attempts SET status='committed',result_hash=?,committed_version=?,updated_at=? WHERE id=?").run(resultHash, snapshot.versionId, now(), attempt.id);
         this.store.db.prepare("UPDATE turns SET status='committed' WHERE id=?").run(turn.id);
@@ -169,7 +171,7 @@ export class WorldService {
     const versions = (this.store.db.prepare('SELECT snapshot FROM versions WHERE world_id=? ORDER BY rowid').all(worldId) as { snapshot: string }[]).map(row => JSON.parse(row.snapshot));
     const chunks = this.store.db.prepare('SELECT c.* FROM response_chunks c JOIN attempts a ON c.attempt_id=a.id JOIN turns t ON a.turn_id=t.id WHERE t.world_id=? ORDER BY c.seq').all(worldId);
     const interactions = this.store.db.prepare('SELECT * FROM interactions WHERE world_id=? ORDER BY seq').all(worldId);
-    return { snapshot, turns, attempts, versions, chunks, interactions, retention: { months: this.store.retentionMonths, currentWorldRetained: true }, events: this.store.events(worldId, 0, -1) };
+    return { snapshot, turns, attempts, versions, chunks, interactions, playback: this.store.playback(worldId), retention: { months: this.store.retentionMonths, currentWorldRetained: true }, events: this.store.events(worldId, 0, -1) };
   }
   private saveSnapshot(snapshot: WorldSnapshot) {
     this.store.db.prepare('INSERT INTO versions(id,world_id,snapshot,expires_at) VALUES (?,?,?,?)').run(snapshot.versionId, snapshot.worldId, canonical(snapshot), this.store.expiryForWorld(snapshot.worldId));

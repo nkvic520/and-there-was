@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, unlinkSync, readdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { addCalendarMonths, canonical, record, type WorldSnapshot } from '@and-there-was/scene';
+import { addCalendarMonths, canonical, record, type WorldSnapshot, type WorldMode, type MotionCues } from '@and-there-was/scene';
 
 export interface TurnRow { seq: number; id: string; world_id: string; client_id: string; text: string; status: string; attempt_id: string | null; created_at: string }
 export interface AttemptRow { seq: number; id: string; turn_id: string; status: string; base_version: string; base_revision: number; package_hash: string | null; request_hash: string | null; response_hash: string | null; result_hash: string | null; committed_version: string | null; error: string | null; created_at: string; updated_at: string }
@@ -42,8 +42,10 @@ export class Store {
       CREATE TABLE IF NOT EXISTS response_chunks (seq INTEGER PRIMARY KEY AUTOINCREMENT, attempt_id TEXT NOT NULL REFERENCES attempts(id), hash TEXT NOT NULL REFERENCES artifacts(hash));
       CREATE TABLE IF NOT EXISTS interactions (seq INTEGER PRIMARY KEY AUTOINCREMENT, world_id TEXT NOT NULL REFERENCES worlds(id), client_id TEXT NOT NULL, version_id TEXT NOT NULL, target_id TEXT NOT NULL, result_hash TEXT NOT NULL, committed_version TEXT, error TEXT, created_at TEXT NOT NULL, expires_at TEXT, UNIQUE(world_id,client_id));
       CREATE INDEX IF NOT EXISTS chunks_attempt ON response_chunks(attempt_id, seq);
-      PRAGMA user_version = 2;
+      CREATE TABLE IF NOT EXISTS playback (world_id TEXT PRIMARY KEY REFERENCES worlds(id), package_hash TEXT NOT NULL, elapsed_ms REAL NOT NULL, paused INTEGER NOT NULL DEFAULT 0);
+      PRAGMA user_version = 3;
     `);
+    addColumn('playback', 'cues', "TEXT NOT NULL DEFAULT '{}'");
   }
   put(text: string, mediaType = 'application/json'): string {
     const hash = createHash('sha256').update(text).digest('hex');
@@ -74,8 +76,9 @@ export class Store {
     const row = this.db.prepare('SELECT retention_enabled FROM worlds WHERE id=?').get(worldId) as { retention_enabled: number } | undefined;
     return row?.retention_enabled ? addCalendarMonths(at, this.retentionMonths).toISOString() : null;
   }
-  createWorld(): WorldSnapshot {
-    const snapshot: WorldSnapshot = { worldId: randomUUID(), versionId: randomUUID(), parentVersionId: null, revision: 0, packageHash: null, state: {}, operations: [], createdAt: now() };
+  createWorld(mode?: WorldMode): WorldSnapshot {
+    if (mode !== undefined && !['animated','storybook'].includes(mode)) throw new HttpError(400, 'Invalid world mode');
+    const snapshot: WorldSnapshot = { worldId: randomUUID(), versionId: randomUUID(), parentVersionId: null, revision: 0, packageHash: null, state: {}, operations: [], createdAt: now(), ...(mode ? { mode } : {}) };
     this.db.transaction(() => {
       this.db.prepare('INSERT INTO worlds(id,current_version,revision) VALUES (?,?,0)').run(snapshot.worldId, snapshot.versionId);
       this.db.prepare('INSERT INTO versions(id,world_id,snapshot) VALUES (?,?,?)').run(snapshot.versionId, snapshot.worldId, canonical(snapshot));
@@ -92,6 +95,26 @@ export class Store {
     const row = this.db.prepare('SELECT snapshot FROM versions WHERE id=?').get(id) as { snapshot: string } | undefined;
     if (!row) throw new HttpError(404, 'Version not found');
     return JSON.parse(row.snapshot);
+  }
+  playback(worldId: string) {
+    const snapshot = this.world(worldId);
+    const row = this.db.prepare('SELECT * FROM playback WHERE world_id=? AND package_hash=?').get(worldId, snapshot.packageHash) as { elapsed_ms: number; paused: number; cues:string } | undefined;
+    return { packageHash: snapshot.packageHash, elapsedMs: row?.elapsed_ms ?? 0, paused: Boolean(row?.paused), cues:JSON.parse(row?.cues ?? '{}') as MotionCues };
+  }
+  savePlayback(worldId: string, versionId: string, elapsedMs: number, paused: boolean, cues: MotionCues = {}) {
+    const snapshot = this.world(worldId);
+    if (snapshot.versionId !== versionId) throw new HttpError(409, 'Stale playback version');
+    if (snapshot.mode === 'storybook' || !snapshot.packageHash) throw new HttpError(400, 'This world has no animation timeline');
+    if (!Number.isFinite(elapsedMs) || elapsedMs < 0 || elapsedMs > 315360000000 || typeof paused !== 'boolean') throw new HttpError(400, 'Invalid playback');
+    if (!record(cues) || Object.keys(cues).length > 64) throw new HttpError(400,'Invalid motion cues');
+    for (const [id,cue] of Object.entries(cues)) {
+      if (!record(cue) || Object.keys(cue).length !== 2 || typeof cue.key !== 'string' || cue.key.length > 80 || typeof cue.startMs !== 'number' || !Number.isFinite(cue.startMs) || cue.startMs < 0 || cue.startMs > elapsedMs || !snapshot.operations.some(op=>op.id === id && op.motionKey === cue.key)) throw new HttpError(400,'Motion cue does not match current scene');
+    }
+    const old = this.playback(worldId);
+    // Late checkpoints never move a timeline backwards. Pause changes at equal time are allowed.
+    if (elapsedMs < old.elapsedMs) return old;
+    this.db.prepare('INSERT INTO playback(world_id,package_hash,elapsed_ms,paused,cues) VALUES (?,?,?,?,?) ON CONFLICT(world_id) DO UPDATE SET package_hash=excluded.package_hash,elapsed_ms=excluded.elapsed_ms,paused=excluded.paused,cues=excluded.cues').run(worldId, snapshot.packageHash, elapsedMs, Number(paused),canonical(cues));
+    return this.playback(worldId);
   }
   turn(id: string): TurnRow {
     const row = this.db.prepare('SELECT * FROM turns WHERE id=?').get(id) as TurnRow | undefined;

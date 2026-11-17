@@ -1,7 +1,8 @@
-import { Application, Graphics, Container } from 'pixi.js';
-import { addCalendarMonths, canonical, type Candidate, type DrawOperation, type ScenePackage, type WorldSnapshot, type TrialResult } from '@and-there-was/scene';
+import { Application } from 'pixi.js';
+import { addCalendarMonths, canonical, type Candidate, type DrawOperation, type ScenePackage, type WorldSnapshot, type TrialResult, type WorldMode, type MotionCues } from '@and-there-was/scene';
 import { runIsolated } from './runtime';
 import { InteractionQueue, clientId } from './interactions';
+import { Presentation } from './presentation';
 import './style.css';
 
 const root = document.querySelector<HTMLElement>('#app')!;
@@ -30,12 +31,13 @@ async function inspect(worldId: string) {
   title.textContent = '世界档案'; back.textContent = '回到画布 ↗'; back.href = `/w/${worldId}`;
   header.append(title, back); root.append(header);
   const description = document.createElement('p'); description.textContent = '原文、生成产物与互动记录 · 真实会话保留 3 个月，当前作品及恢复所需文件继续保留。'; root.append(description);
-  const records = await api<{ snapshot: WorldSnapshot; turns: Record<string, unknown>[]; attempts: Record<string, unknown>[]; versions: WorldSnapshot[]; events: unknown[]; chunks?: unknown[]; interactions?: unknown[]; retention?: unknown }>(`/api/worlds/${worldId}/records`);
+  const records = await api<{ snapshot: WorldSnapshot; turns: Record<string, unknown>[]; attempts: Record<string, unknown>[]; versions: WorldSnapshot[]; events: unknown[]; chunks?: unknown[]; interactions?: unknown[]; retention?: unknown; playback?: unknown }>(`/api/worlds/${worldId}/records`);
   function section(label: string, content: unknown, open = false) {
     const details = document.createElement('details'), summary = document.createElement('summary'), pre = document.createElement('pre');
     summary.textContent = label; pre.textContent = typeof content === 'string' ? content : JSON.stringify(content, null, 2); details.open = open; details.append(summary, pre); root.append(details);
   }
   section('当前世界状态', records.snapshot, true); section('提交文字与轮次', records.turns, true);
+  section('世界模式与动画进度', { mode: records.snapshot.mode ?? 'animated', playback: records.playback });
   // A current work remains inspectable after its originating turn has expired.
   if (records.snapshot.packageHash) {
     const pkg = await artifact<ScenePackage>(records.snapshot.packageHash);
@@ -57,34 +59,34 @@ async function inspect(worldId: string) {
 
 async function playground() {
   root.innerHTML = `<section class="playground" aria-label="创作画布"><div id="canvas" aria-label="空画布"></div><div class="composer-wrap"><p id="status" role="status" aria-live="polite"></p><form id="composer"><label class="sr-only" for="thought">你想让这里有什么？</label><input id="thought" name="thought" placeholder="你想让这里有什么？" autocomplete="off" maxlength="2000" enterkeyhint="done" /><button id="send" type="submit" aria-label="发送" disabled><span aria-hidden="true">↑</span></button></form><button id="retry" class="text-button" hidden>再试一次</button></div></section>`;
+  const toolbar = document.createElement('header'); toolbar.className = 'world-toolbar';
+  toolbar.innerHTML = `<a class="wordmark" href="/" aria-label="创建新世界">就有了<span>一个念头，一个世界</span></a><nav class="world-modes" aria-label="世界模式"><a href="/?mode=animated" data-mode="animated">▷ 动态动画</a><a href="/?mode=storybook" data-mode="storybook">▤ 静态漫画／绘本</a></nav><div class="world-actions"><span id="mode-label"></span><button id="pause" type="button" hidden>暂停动画</button><a href="/" id="new-world">新世界 ＋</a></div>`;
+  root.querySelector('.playground')!.prepend(toolbar);
+  const pause = document.querySelector<HTMLButtonElement>('#pause')!, modeLabel = document.querySelector<HTMLElement>('#mode-label')!;
   const input = document.querySelector<HTMLInputElement>('#thought')!, send = document.querySelector<HTMLButtonElement>('#send')!, form = document.querySelector<HTMLFormElement>('#composer')!;
   const status = document.querySelector<HTMLElement>('#status')!, retry = document.querySelector<HTMLButtonElement>('#retry')!, host = document.querySelector<HTMLElement>('#canvas')!;
   let composing = false, failedTurn: string | undefined, worldId = location.pathname.match(/^\/w\/([\w-]+)$/)?.[1];
   const renderer = new Application();
   await renderer.init({ resizeTo: host, background: '#ffffff', antialias: true, autoDensity: true, resolution: Math.min(devicePixelRatio, 2), preference: 'webgl' });
   host.append(renderer.canvas); renderer.canvas.setAttribute('aria-label', '世界画布');
-  const scene = new Container(); renderer.stage.addChild(scene);
   let current: WorldSnapshot;
   let interactions: InteractionQueue | undefined;
+  const presentation = new Presentation(renderer, host, id => interactions?.enqueue(id));
+  let firstDisplay = true, presentedHash: string | null | undefined;
+  let checkpointing = false;
   function draw(operations: DrawOperation[], bindings = current?.bindings ?? []) {
-    for (const child of scene.removeChildren()) child.destroy();
-    const size = Math.min(host.clientWidth, host.clientHeight), offsetX = (host.clientWidth - size) / 2, offsetY = (host.clientHeight - size) / 2;
-    for (const op of operations) {
-      const graphic = new Graphics();
-      if (op.kind === 'rect') graphic.rect(offsetX + (op.x - op.radiusX) * size, offsetY + (op.y - op.radiusY) * size, op.radiusX * 2 * size, op.radiusY * 2 * size);
-      else graphic.ellipse(offsetX + op.x * size, offsetY + op.y * size, op.radiusX * size, op.radiusY * size);
-      graphic.fill({ color: op.color, alpha: op.alpha });
-      if (bindings.some(binding => binding.targetId === op.id)) { graphic.eventMode = 'static'; graphic.cursor = 'pointer'; graphic.on('pointertap', () => interactions?.enqueue(op.id)); }
-      scene.addChild(graphic);
-    }
-    host.dataset.operationCount = String(operations.length);
+    presentation.set(operations, bindings, current.mode ?? 'animated', firstDisplay); firstDisplay = false;
+    pause.hidden = !presentation.animated; pause.textContent = presentation.paused ? '播放动画' : '暂停动画';
   }
-  new ResizeObserver(() => { if (current) { if (interactions?.pending) void interactions.preview(); else draw(current.operations); } }).observe(host);
   if (!worldId) {
-    current = await api<WorldSnapshot>('/api/worlds', {}); worldId = current.worldId;
+    const mode: WorldMode = new URLSearchParams(location.search).get('mode') === 'storybook' ? 'storybook' : 'animated';
+    current = await api<WorldSnapshot>('/api/worlds', { mode }); worldId = current.worldId;
     history.replaceState(null, '', `/w/${worldId}`);
   } else current = await api<WorldSnapshot>(`/api/worlds/${worldId}`);
   const localWorldId = worldId;
+  const mode = current.mode ?? 'animated'; root.dataset.mode = mode;
+  modeLabel.textContent = mode === 'storybook' ? '静态漫画／绘本' : '动态动画';
+  toolbar.querySelector<HTMLAnchorElement>(`[data-mode="${mode}"]`)?.setAttribute('aria-current', 'page');
   document.title = '就有了 · 一个小小的世界';
   async function applySnapshot(snapshot: WorldSnapshot, force = false) {
     if (interactions?.pending && !force) return;
@@ -96,11 +98,31 @@ async function playground() {
       if (canonical(restored.state) !== canonical(snapshot.state) || canonical(restored.operations) !== canonical(snapshot.operations) || canonical(restored.bindings ?? []) !== canonical(snapshot.bindings ?? [])) throw new Error('恢复结果与保存快照不一致');
     }
     if (snapshot.revision < current.revision) return;
+    if (snapshot.packageHash !== presentedHash) {
+      const saved = await api<{ packageHash:string | null; elapsedMs:number; paused:boolean; cues:MotionCues }>(`/api/worlds/${localWorldId}/playback`);
+      presentation.restore(saved.packageHash === snapshot.packageHash ? saved.elapsedMs : 0, saved.paused,saved.packageHash === snapshot.packageHash ? saved.cues : {});
+      presentedHash = snapshot.packageHash;
+    }
     renderer.renderer.background.color = background;
     current = snapshot; draw(snapshot.operations);
+    toolbar.querySelector<HTMLElement>('.world-modes')!.hidden = snapshot.revision > 0;
     root.dataset.versionId = snapshot.versionId; root.dataset.worldId = snapshot.worldId; root.dataset.revision = String(snapshot.revision);
+    void checkpoint().catch(() => {});
   }
   await applySnapshot(current);
+  async function checkpoint(keepalive = false) {
+    if (!presentation.animated || checkpointing) return;
+    checkpointing = true;
+    try {
+      const response = await fetch(`/api/worlds/${localWorldId}/playback`, { method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({versionId:current.versionId,elapsedMs:presentation.elapsedMs,paused:presentation.paused,cues:presentation.motionCues}),keepalive });
+      if (!response.ok) throw new Error('Animation checkpoint not saved');
+    }
+    finally { checkpointing=false; }
+  }
+  pause.onclick = () => { presentation.pause(!presentation.paused); pause.textContent = presentation.paused ? '播放动画' : '暂停动画'; void checkpoint().catch(() => {}); };
+  const clockTimer = setInterval(() => { void checkpoint().catch(() => {}); }, 2000);
+  document.addEventListener('visibilitychange', () => { if(document.hidden) void checkpoint(true).catch(() => {}); });
+  window.addEventListener('pagehide', () => { clearInterval(clockTimer); void checkpoint(true).catch(() => {}); }, {once:true});
   interactions = new InteractionQueue({ worldId: localWorldId, snapshot: () => current, load: loadPackage, api,
     accept: snapshot => applySnapshot(snapshot, true), preview: (snapshot, count) => { draw(snapshot.operations, snapshot.bindings); root.dataset.pendingEvents = String(count); }, status: message => { status.textContent = message; } });
   // Resolve any lost acknowledgement before replaying queued local events after reload.

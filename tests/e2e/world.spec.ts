@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:http';
-import { modelReply, streamReply } from '../helpers/interactive';
+import { modelReply, streamReply, animatedReply } from '../helpers/interactive';
 import { Store } from '../../apps/server/src/store';
 import { addCalendarMonths } from '@and-there-was/scene';
 
@@ -89,6 +89,88 @@ test('real fixture → isolated worker → saved scene → fresh-browser restore
   await context.close();
 });
 
+test('animation changes actual pixels, pauses and resumes from a saved clock after restart', async ({page,browser,request},info) => {
+  const failures:string[]=[]; page.on('pageerror',error=>failures.push(error.message));
+  await page.goto('/'); await expect(page.locator('#app')).toHaveAttribute('data-revision','0');
+  await page.getByRole('textbox').fill('有一个球'); await page.getByRole('button',{name:'发送',exact:true}).click();
+  await expect(page.locator('#app')).toHaveAttribute('data-revision','1');
+  const worldUrl=page.url(), id=worldUrl.split('/').at(-1)!, canvas=page.locator('canvas');
+  await expect(page.locator('#canvas')).toHaveAttribute('data-animated-nodes','3');
+  await expect.poll(async()=>Number(await page.locator('#canvas').getAttribute('data-animation-time'))).toBeGreaterThan(850);
+  const first=await canvas.screenshot();
+  await expect.poll(async()=>Buffer.compare(first,await canvas.screenshot())).not.toBe(0);
+  const checkpoint=page.waitForResponse(r=>r.request().method()==='POST' && r.url().endsWith('/playback') && r.ok());
+  await page.getByRole('button',{name:'暂停动画'}).click(); await checkpoint;
+  await expect(page.locator('#canvas')).toHaveAttribute('data-animation-paused','true');
+  await expect.poll(async()=>(await (await request.get(`/api/worlds/${id}/playback`)).json()).paused).toBe(true);
+  const before=await (await request.get(`/api/worlds/${id}/records`)).json(), still=await canvas.screenshot();
+  // Observe several actual paint frames after pausing; this is a visual invariant, not only a DOM flag.
+  await page.evaluate(()=>new Promise<void>(resolve=>{let n=0;function f(){if(++n===20)resolve();else requestAnimationFrame(f);}requestAnimationFrame(f);}));
+  expect(await canvas.screenshot()).toEqual(still);
+  await page.screenshot({path:info.outputPath('animated-paused.png')});
+  await page.close(); await stop(); await start();
+  const context=await freshContext(browser,info.project.use), restored=await context.newPage();
+  restored.on('pageerror',error=>failures.push(error.message));
+  await restored.goto(worldUrl); await expect(restored.locator('#app')).toHaveAttribute('data-version-id',before.snapshot.versionId);
+  await expect(restored.getByRole('button',{name:'播放动画'})).toBeVisible();
+  expect(await restored.locator('canvas').screenshot()).toEqual(still);
+  const after=await (await request.get(`/api/worlds/${id}/records`)).json();
+  expect(after.playback).toEqual(before.playback); expect(after.snapshot).toEqual(before.snapshot); expect(after.versions).toHaveLength(2);
+  await restored.getByRole('button',{name:'播放动画'}).click();
+  await expect.poll(async()=>Number(await restored.locator('#canvas').getAttribute('data-animation-time'))).toBeGreaterThan(before.playback.elapsedMs+150);
+  expect(failures).toEqual([]); await context.close();
+});
+
+test('storybook selection produces a still illustrated page and survives fresh-browser restart', async ({page,browser,request},info) => {
+  const failures:string[]=[]; page.on('pageerror',error=>failures.push(error.message));
+  await page.goto('/'); await expect(page.locator('#app')).toHaveAttribute('data-revision','0');
+  await page.getByRole('link',{name:'▤ 静态漫画／绘本'}).click();
+  await expect(page.locator('#app')).toHaveAttribute('data-mode','storybook');
+  const worldUrl=page.url(), id=worldUrl.split('/').at(-1)!;
+  await page.getByRole('textbox').fill('有一个球'); await page.getByRole('button',{name:'发送',exact:true}).click();
+  await expect(page.locator('#app')).toHaveAttribute('data-revision','1');
+  await expect(page.locator('#canvas')).toHaveAttribute('data-animated-nodes','0');
+  await expect(page.locator('#pause')).toBeHidden();
+  const before=await (await request.get(`/api/worlds/${id}/records`)).json();
+  expect(before.snapshot.mode).toBe('storybook'); expect(before.snapshot.operations.filter((o:{kind:string})=>o.kind==='text')).toHaveLength(2);
+  const still=await page.locator('canvas').screenshot();
+  await page.evaluate(()=>new Promise<void>(resolve=>{let n=0;function f(){if(++n===20)resolve();else requestAnimationFrame(f);}requestAnimationFrame(f);}));
+  expect(await page.locator('canvas').screenshot()).toEqual(still);
+  await page.screenshot({path:info.outputPath('storybook.png')});
+  await page.close(); await stop(); await start();
+  const context=await freshContext(browser,info.project.use),restored=await context.newPage();
+  await restored.goto(worldUrl); await expect(restored.locator('#app')).toHaveAttribute('data-version-id',before.snapshot.versionId);
+  expect(await restored.locator('canvas').screenshot()).toEqual(still);
+  expect((await (await request.get(`/api/worlds/${id}/records`)).json()).snapshot).toEqual(before.snapshot);
+  expect(failures).toEqual([]); await context.close();
+});
+
+test('tapping a composed character restarts its motion and restores the saved cue',async({page,browser,request},info)=>{
+  const model=createServer(async(req,res)=>{for await(const _ of req){} res.setHeader('Content-Type','text/event-stream');res.end(streamReply(await animatedReply()));});
+  await new Promise<void>(resolve=>model.listen(0,'127.0.0.1',resolve));
+  const address=model.address() as {port:number}; await stop();
+  modelEnvironment={GENERATOR_MODE:'deepseek',DEEPSEEK_API_KEY:'test-key',DEEPSEEK_BASE_URL:`http://127.0.0.1:${address.port}`}; await start();
+  try {
+    await page.goto('/');await expect(page.locator('#app')).toHaveAttribute('data-revision','0');
+    await page.getByRole('textbox').fill('小狐狸');await page.getByRole('button',{name:'发送',exact:true}).click();
+    await expect(page.locator('#app')).toHaveAttribute('data-revision','1');
+    const url=page.url(),id=url.split('/').at(-1)!;
+    await expect.poll(async()=>Number(await page.locator('#canvas').getAttribute('data-animation-time'))).toBeGreaterThan(2200);
+    const box=(await page.locator('canvas').boundingBox())!,size=Math.min(box.width,box.height),x=box.x+box.width/2,y=box.y+(box.height-size)/2+.55*size;
+    if(info.project.use.hasTouch)await page.touchscreen.tap(x,y);else await page.mouse.click(x,y);
+    await expect(page.locator('#app')).toHaveAttribute('data-revision','2');
+    await page.getByRole('button',{name:'暂停动画'}).click();
+    await expect.poll(async()=>(await (await request.get(`/api/worlds/${id}/playback`)).json()).paused).toBe(true);
+    const before=await (await request.get(`/api/worlds/${id}/records`)).json();
+    expect(before.snapshot.state.taps).toBe(1);expect(before.playback.cues.actor.key).toBe('1');expect(before.playback.cues.actor.startMs).toBeGreaterThan(2000);
+    const still=await page.locator('canvas').screenshot();await page.close();await stop();await start();
+    const context=await freshContext(browser,info.project.use),restored=await context.newPage();
+    await restored.goto(url);await expect(restored.locator('#app')).toHaveAttribute('data-revision','2');
+    expect(await restored.locator('canvas').screenshot()).toEqual(still);
+    await context.close();
+  } finally {await stop();modelEnvironment={};await start();model.closeAllConnections();await new Promise<void>(resolve=>model.close(()=>resolve()));}
+});
+
 test('failure and retry preserve the ball; repeated successful sentences remain one ball', async ({ page, request }) => {
   await page.goto('/'); await expect(page.locator('#app')).toHaveAttribute('data-revision', '0');
   await page.getByRole('textbox').fill('有一个球'); await page.getByRole('button', { name: '发送', exact: true }).click();
@@ -158,7 +240,7 @@ test('DeepSeek transport, offline taps, lost acknowledgement, restart and protoc
     const body = JSON.parse(Buffer.concat(chunks).toString()), input = JSON.parse(body.messages[1].content); calls.push(input);
     res.writeHead(200, { 'Content-Type': 'text/event-stream' });
     if (input.request === 'bad upgrade' && !failureSent) { failureSent = true; res.end(streamReply('{malformed')); }
-    else res.end(streamReply(await modelReply(input.request.includes('upgrade'))));
+    else res.end(streamReply(await modelReply(input.request.includes('upgrade'), input.snapshot.mode)));
   });
   await new Promise<void>(resolve => model.listen(0, '127.0.0.1', resolve));
   const address = model.address(); if (!address || typeof address === 'string') throw new Error('No model test port');

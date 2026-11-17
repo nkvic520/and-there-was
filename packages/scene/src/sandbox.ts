@@ -61,9 +61,14 @@ export async function executePackage(engine: QuickJSWASMModule, pkg: ScenePackag
         setState: value => { save(JSON.stringify(value)); state = value; },
         circle: (id, x, y, radius, color, alpha = 1) => draw(JSON.stringify({kind:'circle',id,x,y,radiusX:radius,radiusY:radius,color,alpha})),
         ellipse: (id, x, y, radiusX, radiusY, color, alpha = 1) => draw(JSON.stringify({kind:'ellipse',id,x,y,radiusX,radiusY,color,alpha}))
-        ${pkg.sdkVersion === 2 ? `,
+        ${pkg.sdkVersion >= 2 ? `,
         rect: (id, x, y, width, height, color, alpha = 1) => draw(JSON.stringify({kind:'rect',id,x,y,radiusX:width/2,radiusY:height/2,color,alpha})),
         onTap: (targetId, event, payload = {}) => bind(JSON.stringify({targetId,event,payload}))` : ''}
+        ${pkg.sdkVersion === 3 ? `,
+        node: spec => {
+          const {width = .1, height = width, ...fields} = spec;
+          draw(JSON.stringify({kind:'ellipse',x:0,y:0,radiusX:width/2,radiusY:height/2,color:'#ffffff',alpha:1,...fields}));
+        }` : ''}
       });
     })()`);
     vm.unwrapResult(bootstrap).dispose();
@@ -82,14 +87,14 @@ export async function executePackage(engine: QuickJSWASMModule, pkg: ScenePackag
           finally { result.dispose(); }
         } finally { handles.forEach(h => h.dispose()); sdk.dispose(); fn.dispose(); }
       };
-      if (options.migrate && pkg.sdkVersion === 2) call('migrate', [options.previousProtocol ?? null], false);
+      if (options.migrate && pkg.sdkVersion >= 2) call('migrate', [options.previousProtocol ?? null], false);
       if (options.event) call('onEvent', [options.event.name, options.event.payload]);
       // Event handlers and migration change state; only mount defines the full drawing.
       operations.length = 0; bindings.length = 0;
       call('mount');
     } finally { exports.dispose(); }
     if (bridgeError) throw bridgeError;
-    const output = { state, operations, ...(pkg.sdkVersion === 2 ? { bindings } : {}), durationMs: performance.now() - started, runtimeVersion: runtimeVersion(pkg.sdkVersion) };
+    const output = { state, operations, ...(pkg.sdkVersion >= 2 ? { bindings } : {}), durationMs: performance.now() - started, runtimeVersion: runtimeVersion(pkg.sdkVersion) };
     validateOutput(protocol, output);
     return output;
   } catch (error) {
