@@ -69,6 +69,6 @@ Compose 只绑定本机 3000 端口。Codespaces 使用开发容器，运行 `np
 - 试跑结果在服务端二次校验并提交后才显示；保存后校验失败会保留旧场景。恢复时重新加载对应脚本，重建的状态和绘图必须与已保存快照一致。
 - 试跑回执来自私有实例的可信宿主，不作为面向不可信多用户的远程执行证明。
 - 真实模型、连续生成新玩法、互动、迁移、撤销、完整导出和作品发布尚未实现。
-- REDMI Turbo 4 的 Edge 已由用户实测输入、选字、触摸发送和重启恢复。Android Chrome、Windows 系统级中文输入法与离线听写尚未实测；浏览器模拟不能代替。
+- Windows Edge/Chrome 的系统中文输入法，以及 REDMI Turbo 4 Edge 的输入、选字、触摸发送和重启恢复，均已由用户实测确认。Android Chrome 与离线听写尚未实测；浏览器模拟不能代替。
 
 需求依据：[项目架构与需求说明](docs/and-there-was-architecture-and-requirements.md) · [GitHub 开发说明](docs/and-there-was-github-development-guide.md)。开源许可：[MIT](LICENSE)。

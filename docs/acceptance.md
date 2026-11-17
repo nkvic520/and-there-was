@@ -2,7 +2,7 @@
 
 日期：2026-11-17（Asia/Shanghai）。产品范围为确定性「有一个球」样例，不包含真实模型。
 
-已验证应用源码提交：`e5300f4`。后续仅更新本验收文档与截图时，以此提交的运行行为为基线。
+已验证应用源码提交：`3e68e86`（包含局域网 HTTP 支持）。后续仅更新本验收文档与截图时，以此提交的运行行为为基线。
 
 ## 本地实测
 
@@ -13,16 +13,17 @@ Windows 11，Node.js 24.11.1，npm 11.6.2。使用根目录命令，未配置模
 | `npm run check` | TypeScript 检查与 26 项协议、沙箱、API/持久化测试通过 |
 | `npm run build` | Vite 前端、Worker/WASM 和 Node 服务端生产构建通过 |
 | `npm start` | 单进程在 3000 提供页面、API 和 WASM，实际样例链路通过 |
+| `npm run start:lan` | 监听 `0.0.0.0:3000`，手机通过电脑 WLAN 地址完成真实提交与重启恢复 |
 | `npm run dev` | 5173 同址代理 API；可见浏览器输入中文、Enter 不提交、点击发送出现球 |
-| `npm run test:e2e` | 12/12，通过 Chrome、Edge、Pixel 7 尺寸/触摸模拟三组测试 |
+| `npm run test:e2e` | 15/15，通过 Chrome、Edge、Pixel 7 尺寸/触摸模拟三组测试，包含非安全上下文的普通 HTTP |
 
 生产端到端测试中的观测值（自动化墙钟，含浏览器操作与断言开销；不是模型性能承诺）：
 
 | 环境 | 浏览器版本 | 本地反馈 | 首次可辨认变化 |
 | --- | --- | ---: | ---: |
-| Windows Chrome | 157.0.8103.51 | 54 ms | 374 ms |
-| Windows Edge | 157.0.4341.60 | 52 ms | 870 ms |
-| 手机尺寸模拟 | Chrome 157.0.8103.51 | 51 ms | 861 ms |
+| Windows Chrome | 157.0.8103.51 | 56 ms | 870 ms |
+| Windows Edge | 157.0.4341.60 | 55 ms | 877 ms |
+| 手机尺寸模拟 | Chrome 157.0.8103.51 | 65 ms | 906 ms |
 
 三组样例包 SHA-256 一致：`b81e4ebfccf6669bc707feb88f4048ebed2e07aa9ec7bcfd24f2c8fcfc977571`。
 
@@ -39,16 +40,25 @@ Windows 11，Node.js 24.11.1，npm 11.6.2。使用根目录命令，未配置模
 - 无限循环、64MiB 分配、网络/DOM/Node API 访问、外部导入、输出超限、非法状态/绘图与哈希不符均被拒绝。
 - SSE 根据持久化序号补取；重启中断的候选保留产物并标记失败，可以重试。
 - 中文组合输入事件期间不会提交；Enter 不直接发送整句。
+- 普通局域网 HTTP 中 `isSecureContext=false`、`crypto.subtle` 不可用时，提交 ID、SHA-256 校验、Worker 执行、保存和刷新恢复均正常。
 
 ## 远端和实机
 
-应用源码提交 `e5300f4` 的 [GitHub Actions 检查](https://github.com/nkvic520/and-there-was/actions/runs/44048333006) 全部通过：Windows 与 Ubuntu 均完成干净 `npm ci`、26 项核心测试、生产构建和 4 项 Chromium 端到端测试；容器完成镜像构建、独立持久卷启动、隔离试跑、提交、重启及快照/运行包恢复。
+应用源码提交 `3e68e86` 的 [GitHub Actions 检查](https://github.com/nkvic520/and-there-was/actions/runs/44050886489) 全部通过：Windows 与 Ubuntu 均完成干净 `npm ci`、26 项核心测试、生产构建和 5 项 Chromium 端到端测试；容器完成镜像构建、独立持久卷启动、隔离试跑、提交、重启及快照/运行包恢复。
 
-容器验收版本 ID：`c37109c4-fc18-4163-b6e9-7e0871169205`；包哈希与本地三组测试一致。当前电脑没有 Docker，以上容器结果来自实际 GitHub Linux runner，而非本机推测。
+容器验收版本 ID：`3471b75c-b773-4536-92f9-0d14b6099fd0`；包哈希与本地三组测试一致。当前电脑没有 Docker，以上容器结果来自实际 GitHub Linux runner，而非本机推测。
 
-Android 已连接 REDMI Turbo 4，Android 16，Edge 149.0.4022.80，并验证 ADB 反向端口映射已建立。但自动审批拒绝了通过 ADB 启动浏览器、读取调试接口并截图的命令（返回 `blocked by policy`），因此转为用户操作手机。用户随后确认看到球的是电脑/Codex 内置浏览器，**Android 实机的软键盘、候选确认、触摸发送和恢复均仍为待验收**。Chrome 未安装，不宣称 Android Chrome 已通过。
+Android 实机：REDMI Turbo 4，Android 16，Edge 149.0.4022.80，讯飞输入法。最终通过电脑 WLAN 地址直接访问，未依赖 ADB 反向端口映射。
 
-系统级 Windows 中文输入法候选操作、离线听写及实际 Codespaces 会话尚未完成实测。应用不录音，不能验证输入法是否在设备上离线识别。
+1. 用户在手机 Edge 打开空画布，以软键盘输入「有一个球」并触摸发送，确认「已出现球，输入和选字正常」。服务端核对到来自该手机的请求、试跑回执与成功版本。
+2. 保存快照基线，实际停止 Node 服务进程后重新启动。同一世界的完整快照、版本 ID、包哈希、轮次与尝试数均一致。
+3. 用户刷新手机原世界 URL，确认「刷新后仍有一个球」。再次核对服务端仍只有一次提交、一次尝试和一个成功场景版本（另有初始空版本）。
+
+手机手动操作的本地反馈和首帧延迟未精确采样。Chrome 未安装，不宣称 Android Chrome 已通过。自动审批曾拒绝通过 ADB 启动浏览器、读取调试接口并截图的命令（返回 `blocked by policy`），以上实机 UI 结果由用户手动确认，保存与恢复由服务端核对；未取得手机自动化截图。
+
+Windows 系统级中文输入法已由用户分别在 Edge 和 Chrome 手动验证：选字确认或按 Enter 均不发送整句，点击发送按钮后才显示球；用户确认「两种浏览器都正常」。
+
+离线听写及实际 Codespaces 会话尚未完成实测。应用不录音，不能验证输入法是否在设备上离线识别。
 
 ## 复现方法
 
@@ -59,4 +69,4 @@ Android 已连接 REDMI Turbo 4，Android 16，Edge 149.0.4022.80，并验证 AD
 5. 执行 `npm run check`、`npm run test:e2e` 自动复现失败、重复请求和恢复测试。
 6. 有 Docker 时运行 `npm run test:container`，使用独立临时持久卷验证镜像启动、提交和重启恢复。也可 `docker compose up --build -d` 后 `docker compose restart`，保留 `world-data` 卷。
 
-Android 实机可在已授权 ADB 连接后执行 `adb -s <设备序列号> reverse tcp:3000 tcp:3000`，再在手机浏览器打开同一个 localhost 地址。验收后可用 `adb -s <设备序列号> reverse --remove tcp:3000` 移除映射。
+Android 实机首选在可信局域网运行 `npm run start:lan`，手机访问 `http://<电脑局域网IP>:3000/`。注意手机上的 `127.0.0.1` 指手机本身。只有额外建立了已授权的 ADB 反向映射 `adb -s <设备序列号> reverse tcp:3000 tcp:3000`，才可用手机 localhost 访问电脑服务；验收后可执行 `adb -s <设备序列号> reverse --remove tcp:3000` 移除该映射。
