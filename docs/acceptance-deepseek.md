@@ -1,6 +1,6 @@
 # 0.2 真实生成与互动验收
 
-日期：2026-11-17（Asia/Shanghai）。实现提交：`3962aacc0cb920950b94b29170241fcb694a960e`。文档提交只补充说明和实测记录；远端验证以关联 PR 的 Actions 所测 SHA 为准。
+日期：2026-11-17（Asia/Shanghai）。主体实现提交：`3962aacc0cb920950b94b29170241fcb694a960e`；失败后继续玩的重试入口修正：`79d38ca2a13d42ab52000a8052ee16e0066effe8`。文档提交只补充说明和实测记录；远端验证以 [PR #4](https://github.com/nkvic520/and-there-was/pull/4) 的 Actions 所测 SHA 为准。
 
 ## 本阶段范围与变更确认
 
@@ -21,6 +21,7 @@
 | `npm run build` | 服务端与 Vite/PixiJS/Worker/WASM 生产构建通过 |
 | `npm run dev` | API 与 Vite 均启动；用独立临时数据和 fixture 模式检查启动命令 |
 | `npm run test:e2e` | 18/18 通过：Chrome、Edge、Pixel 7 尺寸与触摸模拟各 6 项 |
+| 最后的重试入口修正回归 | 再运行三个浏览器项目的 DeepSeek 互动用例，3/3 通过；覆盖失败后继续玩、重试按钮保留、修复生成和保留最新次数 |
 | `npm run start:lan` | 生产包由同一 Node 进程提供页面和 API，电脑与手机局域网访问通过 |
 
 本地浏览器版本：Chrome 157.0.8103.51、Edge 157.0.4341.60。E2E 的 DeepSeek 网络响应由本地测试服务提供；它验证真实 HTTP/SSE 适配器和浏览器沙箱，但不代表真实模型的成功率。
@@ -35,6 +36,7 @@
 - 生成期间继续互动，新候选在最新状态上迁移，不回滚已保存次数。
 - 非法状态、未声明事件、迁移失败及绑定超限被拦截；失败互动留下诊断。
 - 显式生成重试携带上次失败代码和诊断，两个尝试都可追溯。
+- 生成失败后继续点击原世界，重试入口仍可用；重试使用刚保存的互动次数。
 - 模拟四个月后清理真实档案，当前版本、文件哈希、互动与档案页源码仍可恢复；样例保留。
 
 ## 真实 DeepSeek 实测
@@ -56,11 +58,14 @@
 | Windows Edge：连续生成光和门的规则，鼠标触碰 | 用户确认第三次出现门，输入框正常；对应世界保存 2 轮生成及互动版本 |
 | Windows Edge：停止并重新启动生产服务后刷新同一世界 | 服务端比较完整快照、版本、包哈希、轮次与互动数一致；用户确认恢复正常且仍能点击 |
 | REDMI Turbo 4 / Android 16 / Edge：连续生成、触屏触碰 | 用户确认第三次出现门，触摸和输入正常 |
+| Android Edge：停止并重新启动服务后刷新同一世界 | 服务端核对完整快照、版本、包哈希和记录数一致；用户确认画面恢复、互动正常 |
 
-系统中文输入法的 Windows Edge/Chrome 与 Android Edge 样例检查沿用[首版记录](acceptance.md)。Android Chrome、离线系统听写未实测。真实模型在 Android 的本轮重启后刷新检查另行补记，不以模拟触屏结果代替。
+系统中文输入法的 Windows Edge/Chrome 与 Android Edge 样例检查沿用[首版记录](acceptance.md)。Android Chrome、离线系统听写未实测；不以模拟触屏结果代替实机。
 
 ## 远端状态与复现
 
-本阶段新实现的 Windows/Linux CI 与容器重启结果将在 PR 检查完成后补记；之前的绿色工作流属于样例 MVP，不能作为本阶段验收证据。此电脑没有 Docker，本地未冒称运行容器。
+本阶段主体实现与文档提交 `cd1ccbc2f0e932e3d370fd3563126c5283ef118b` 的 [Actions 44064917161](https://github.com/nkvic520/and-there-was/actions/runs/44064917161) 已全部通过：Windows/Linux 分别执行安装、40 项测试、构建和 6 项 Chromium E2E；容器任务实际构建镜像并用同一个持久卷恢复球样例。此电脑没有 Docker，容器结果来自 GitHub Linux runner。
+
+后续重试入口修正也由 PR 自动重新检查；最终分支的通过状态及对应提交见 [PR 检查页](https://github.com/nkvic520/and-there-was/pull/4/checks)。不以旧样例版工作流代替本阶段验证。
 
 本地复现见 [README](../README.md)。保留 `/w/<世界ID>` 完整地址，检查 `/inspect/<世界ID>` 的协议、源码和状态。模型检查必须设 `GENERATOR_MODE=deepseek`；普通 `npm ci` 后的默认模式仍为无密钥样例。运行数据、完整响应、密钥和浏览器产物均在 Git 忽略范围内。
