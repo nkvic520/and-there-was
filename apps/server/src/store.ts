@@ -4,7 +4,7 @@ import { resolve, join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { addCalendarMonths, canonical, record, type WorldSnapshot, type WorldMode, type MotionCues } from '@and-there-was/scene';
 
-export interface TurnRow { seq: number; id: string; world_id: string; client_id: string; text: string; status: string; attempt_id: string | null; created_at: string }
+export interface TurnRow { seq: number; id: string; world_id: string; client_id: string; text: string; status: string; attempt_id: string | null; created_at: string; art_selection:string }
 export interface AttemptRow { seq: number; id: string; turn_id: string; status: string; base_version: string; base_revision: number; package_hash: string | null; request_hash: string | null; response_hash: string | null; result_hash: string | null; committed_version: string | null; error: string | null; created_at: string; updated_at: string }
 export class HttpError extends Error { constructor(public statusCode: number, message: string) { super(message); } }
 export const now = () => new Date().toISOString();
@@ -46,8 +46,12 @@ export class Store {
       PRAGMA user_version = 3;
     `);
     addColumn('playback', 'cues', "TEXT NOT NULL DEFAULT '{}'");
+    addColumn('turns', 'art_selection', "TEXT NOT NULL DEFAULT '{}'");
+    this.db.exec(`CREATE TABLE IF NOT EXISTS images(id TEXT PRIMARY KEY,world_id TEXT,metadata TEXT NOT NULL,created_at TEXT NOT NULL,expires_at TEXT);
+      CREATE TABLE IF NOT EXISTS image_jobs(id TEXT PRIMARY KEY,world_id TEXT NOT NULL,attempt_id TEXT NOT NULL,status TEXT NOT NULL,request_hash TEXT,response_hash TEXT,image_id TEXT,error TEXT,created_at TEXT NOT NULL,expires_at TEXT NOT NULL);
+      PRAGMA user_version=4;`);
   }
-  put(text: string, mediaType = 'application/json'): string {
+  put(text: string | Uint8Array, mediaType = 'application/json'): string {
     const hash = createHash('sha256').update(text).digest('hex');
     const target = join(this.directory, 'artifacts', hash);
     if (!existsSync(target)) {
@@ -60,14 +64,15 @@ export class Store {
     return hash;
   }
   putJson(value: unknown): string { return this.put(canonical(value)); }
-  read(hash: string): string {
+  readBytes(hash: string): Buffer {
     if (!/^[a-f0-9]{64}$/.test(hash) || !this.db.prepare('SELECT 1 FROM artifacts WHERE hash=?').get(hash)) throw new HttpError(404, 'Artifact not found');
-    let text: string;
-    try { text = readFileSync(join(this.directory, 'artifacts', hash), 'utf8'); }
+    let text: Buffer;
+    try { text = readFileSync(join(this.directory, 'artifacts', hash)); }
     catch { throw new HttpError(500, 'Saved artifact is missing'); }
     if (createHash('sha256').update(text).digest('hex') !== hash) throw new HttpError(500, 'Saved artifact hash mismatch');
     return text;
   }
+  read(hash: string): string { return this.readBytes(hash).toString('utf8'); }
   json<T>(hash: string): T { return JSON.parse(this.read(hash)) as T; }
   event(worldId: string, kind: string, payload: unknown): void {
     this.db.prepare('INSERT INTO events(world_id,kind,payload,created_at,expires_at) VALUES (?,?,?,?,?)').run(worldId, kind, canonical(payload), now(), this.expiryForWorld(worldId));
@@ -148,13 +153,14 @@ export class Store {
       }
       const interactions = this.db.prepare('DELETE FROM interactions WHERE expires_at<=?').run(cutoff).changes;
       const events = this.db.prepare('DELETE FROM events WHERE expires_at<=?').run(cutoff).changes;
+      const imageJobs = this.db.prepare("DELETE FROM image_jobs WHERE expires_at<=? AND status<>'generating'").run(cutoff).changes;
       const versions = this.db.prepare(`DELETE FROM versions WHERE expires_at<=?
         AND id NOT IN (SELECT current_version FROM worlds)
         AND id NOT IN (SELECT base_version FROM attempts)
         AND id NOT IN (SELECT committed_version FROM attempts WHERE committed_version IS NOT NULL)
         AND id NOT IN (SELECT version_id FROM interactions)
         AND id NOT IN (SELECT committed_version FROM interactions WHERE committed_version IS NOT NULL)`).run(cutoff).changes;
-      return { turns: expired.length, interactions, events, versions };
+      return { turns: expired.length, interactions, events, versions, imageJobs };
     })();
     // Trace from surviving rows, then recursively retain runtime package members.
     const live = new Set<string>(), pending: string[] = [];
@@ -162,15 +168,22 @@ export class Store {
     for (const row of this.db.prepare('SELECT request_hash,response_hash,result_hash,package_hash FROM attempts').all() as Record<string, string>[]) Object.values(row).forEach(retain);
     for (const row of this.db.prepare('SELECT hash FROM response_chunks UNION SELECT result_hash AS hash FROM interactions').all() as { hash: string }[]) retain(row.hash);
     for (const row of this.db.prepare('SELECT snapshot FROM versions').all() as { snapshot: string }[]) retain(JSON.parse(row.snapshot).packageHash);
+    const imageIds = new Set<string>();
+    const retainImage = (a: {imageId:string;hash:string;originalHash:string}) => {imageIds.add(a.imageId); retain(a.hash); retain(a.originalHash);};
+    for (const row of this.db.prepare('SELECT metadata FROM images WHERE expires_at IS NULL OR expires_at>?').all(cutoff) as {metadata:string}[]) retainImage(JSON.parse(row.metadata));
+    for (const row of this.db.prepare('SELECT request_hash,response_hash FROM image_jobs').all() as Record<string,string>[]) Object.values(row).forEach(retain);
     while (pending.length) {
       const hash = pending.pop()!;
       try {
         const value = JSON.parse(this.read(hash));
         if (record(value) && value.formatVersion === 1 && record(value.files)) {
           for (const file of Object.values(value.files)) if (typeof file === 'string') retain(createHash('sha256').update(file).digest('hex'));
+          if (Array.isArray(value.assets)) for (const a of value.assets) if (record(a) && typeof a.imageId==='string' && typeof a.hash==='string' && typeof a.originalHash==='string') retainImage(a as {imageId:string;hash:string;originalHash:string});
         }
       } catch { /* A code/partial response artifact need not be JSON. */ }
     }
+    let images = 0;
+    for (const row of this.db.prepare('SELECT id FROM images WHERE expires_at<=?').all(cutoff) as {id:string}[]) if(!imageIds.has(row.id)) images += this.db.prepare('DELETE FROM images WHERE id=?').run(row.id).changes;
     let artifacts = 0;
     for (const row of this.db.prepare('SELECT hash FROM artifacts').all() as { hash: string }[]) if (!live.has(row.hash)) {
       // Only exact hash filenames inside this store's artifacts directory are eligible.
@@ -180,7 +193,7 @@ export class Store {
     }
     for (const file of readdirSync(join(this.directory, 'artifacts'))) if (/^[a-f0-9]{64}\.[a-f0-9-]{36}\.tmp$/.test(file)) unlinkSync(join(this.directory, 'artifacts', file));
     if (Object.values(counts).some(Boolean) || artifacts) this.db.pragma('wal_checkpoint(TRUNCATE)');
-    return { ...counts, artifacts };
+    return { ...counts, artifacts, images };
   }
   close() { this.db.close(); }
 }

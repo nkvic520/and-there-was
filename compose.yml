@@ -11,6 +11,10 @@ services:
       DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-flash}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      SEEDREAM_BASE_URL: ${SEEDREAM_BASE_URL:-https://ark.cn-beijing.volces.com/api/v3}
+      SEEDREAM_MODEL: ${SEEDREAM_MODEL:-doubao-seedream-5-5-261028}
+      SEEDREAM_API_KEY: ${SEEDREAM_API_KEY:-}
+      SEEDREAM_SIZE: ${SEEDREAM_SIZE:-2K}
       ARCHIVE_RETENTION_MONTHS: "3"
     volumes:
       - world-data:/data

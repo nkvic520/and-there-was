@@ -29,7 +29,7 @@ async function run(pkg: ScenePackage, state: SceneState, expectedHash: string, o
     active.onmessage = event => {
       if (event.data.type === 'ready') { ready = true; execute(); }
       else if (event.data.type === 'result') {
-        try { validateOutput(protocol, event.data.output); finish(undefined, event.data.output); }
+        try { validateOutput(protocol, event.data.output, pkg.assets); finish(undefined, event.data.output); }
         catch (error) { finish(error as Error); }
       } else finish(new Error(event.data.error));
     };

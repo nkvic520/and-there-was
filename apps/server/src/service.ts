@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { canonical, validatePackage, validateOutput, validateWorldMode, type ScenePackage, type TrialResult, type Candidate, type WorldSnapshot, type InteractionReceipt } from '@and-there-was/scene';
+import { assert, canonical, validatePackage, validateOutput, validateWorldMode, type ScenePackage, type TrialResult, type Candidate, type WorldSnapshot, type InteractionReceipt, type ArtSelection } from '@and-there-was/scene';
 import { Store, HttpError, now, type AttemptRow, type TurnRow } from './store';
 import { FixtureGenerator, type Generator } from './generator';
+import { Images } from './images';
 
 export class WorldService {
   private pumping = new Set<string>();
@@ -10,7 +11,7 @@ export class WorldService {
   private retentionTimer: ReturnType<typeof setInterval>;
   private controllers = new Set<AbortController>();
   get generatorId() { return this.generator.id; }
-  constructor(readonly store: Store, private generator: Generator = new FixtureGenerator(), private trialTimeoutMs = 60000, private generationTimeoutMs = 125000) {
+  constructor(readonly store: Store, private generator: Generator = new FixtureGenerator(), private trialTimeoutMs = 60000, private generationTimeoutMs?: number, readonly images = new Images(store)) {
     // On process restart, an uncommitted candidate is never inferred to be active.
     const interrupted = store.db.prepare("SELECT * FROM attempts WHERE status IN ('generating','trial')").all() as AttemptRow[];
     for (const attempt of interrupted) this.fail(attempt.id, '服务已重启，本次尝试中断。可以重试。');
@@ -22,18 +23,20 @@ export class WorldService {
     for (const row of store.db.prepare("SELECT DISTINCT world_id FROM turns WHERE status='queued'").all() as { world_id: string }[]) this.schedule(row.world_id);
   }
   schedule(worldId: string) { queueMicrotask(() => { if (!this.closed) void this.pump(worldId); }); }
-  submit(worldId: string, clientId: string, text: string): TurnRow {
+  submit(worldId: string, clientId: string, text: string, selection: ArtSelection = {}): TurnRow {
     this.store.world(worldId);
+    if (selection.artSource !== undefined && !['library','seedream'].includes(selection.artSource) || selection.assetIds !== undefined && (!Array.isArray(selection.assetIds) || selection.assetIds.length > 16 || selection.assetIds.some(id => typeof id !== 'string' || !/^[\w-]{1,80}$/.test(id))) || selection.allowUploadReferences !== undefined && typeof selection.allowUploadReferences !== 'boolean') throw new HttpError(400,'Invalid art selection');
+    const submittedAssets = this.images.available(worldId, selection);
     if (!/^[\w-]{8,100}$/.test(clientId) || !text.trim() || text.length > 2000) throw new HttpError(400, 'Invalid submission');
     const existing = this.store.db.prepare('SELECT * FROM turns WHERE world_id=? AND client_id=?').get(worldId, clientId) as TurnRow | undefined;
     if (existing) {
-      if (existing.text !== text) throw new HttpError(409, 'Submission id already used with different text');
+      if (existing.text !== text || existing.art_selection !== canonical(selection)) throw new HttpError(409, 'Submission id already used with different text or images');
       return existing;
     }
     const id = randomUUID();
     this.store.db.transaction(() => {
-      if (this.generator.id.startsWith('deepseek/')) this.store.db.prepare('UPDATE worlds SET retention_enabled=1 WHERE id=?').run(worldId);
-      this.store.db.prepare("INSERT INTO turns(id,world_id,client_id,text,status,created_at,expires_at) VALUES (?,?,?,?,'queued',?,?)").run(id, worldId, clientId, text, now(), this.generator.id.startsWith('deepseek/') ? this.store.expiryForWorld(worldId) : null);
+      if (this.generator.id.startsWith('deepseek/') || submittedAssets.some(a=>a.source==='upload')) this.store.db.prepare('UPDATE worlds SET retention_enabled=1 WHERE id=?').run(worldId);
+      this.store.db.prepare("INSERT INTO turns(id,world_id,client_id,text,status,created_at,expires_at,art_selection) VALUES (?,?,?,?,'queued',?,?,?)").run(id, worldId, clientId, text, now(), this.store.expiryForWorld(worldId), canonical(selection));
       this.store.event(worldId, 'turn.queued', { turnId: id, receivedVersionId: this.store.world(worldId).versionId });
     })();
     this.schedule(worldId);
@@ -72,10 +75,14 @@ export class WorldService {
         try {
           const previous = this.store.db.prepare("SELECT * FROM attempts WHERE turn_id=? AND status='failed' ORDER BY seq DESC LIMIT 1").get(turn.id) as AttemptRow | undefined;
           const previousResponse = previous?.response_hash ? this.store.json<{ content?: string }>(previous.response_hash) : undefined;
+          const artSelection: ArtSelection = JSON.parse(turn.art_selection);
+          const previousPackage = baseline.packageHash ? this.store.json<ScenePackage>(baseline.packageHash) : undefined;
+          const failedPackage = previous?.package_hash ? this.store.json<ScenePackage>(previous.package_hash) : undefined;
+          const availableAssets = this.images.available(worldId, artSelection, previousPackage, failedPackage?.assets);
           const pkg = await Promise.race([
             this.generator.generate(turn.text, baseline, {
-              previousPackage: baseline.packageHash ? this.store.json<ScenePackage>(baseline.packageHash) : undefined,
-              previousFailure: previous ? { error: previous.error ?? 'Unknown error', ...(previous.package_hash ? { package: this.store.json<ScenePackage>(previous.package_hash) } : {}), ...(previousResponse?.content ? { content: previousResponse.content.slice(0, 16000) } : {}) } : undefined,
+              previousPackage, artSelection, availableAssets,
+              previousFailure: previous ? { error: previous.error ?? 'Unknown error', ...(failedPackage ? { package: failedPackage } : {}), ...(previousResponse?.content ? { content: previousResponse.content.slice(0, 16000) } : {}) } : undefined,
               signal: controller.signal,
               request: value => { if (!this.closed && !controller.signal.aborted) this.store.db.prepare('UPDATE attempts SET request_hash=? WHERE id=?').run(this.store.putJson(value), attemptId); },
               chunk: text => {
@@ -84,8 +91,25 @@ export class WorldService {
                 this.store.db.prepare('INSERT INTO response_chunks(attempt_id,hash) VALUES (?,?)').run(attemptId, hash);
               },
               response: value => { if (!this.closed) this.store.db.prepare('UPDATE attempts SET response_hash=? WHERE id=?').run(this.store.putJson(value), attemptId); }
+            }).then(async plan => {
+              controller.signal.throwIfAborted();
+              if (!this.store.attempt(attemptId).response_hash) this.store.db.prepare('UPDATE attempts SET response_hash=? WHERE id=?').run(this.store.putJson(plan), attemptId);
+              const {assetIds = [], assetRequests = [], ...pkg} = plan;
+              for (const [name, content] of Object.entries(pkg.files ?? {})) if (typeof content === 'string') this.store.put(content, name.endsWith('.json') ? 'application/json' : 'text/plain');
+              this.store.db.prepare('UPDATE attempts SET package_hash=? WHERE id=?').run(this.store.putJson(pkg), attemptId);
+              assert(Array.isArray(assetIds) && assetIds.length <= 16 && new Set(assetIds).size === assetIds.length, 'Invalid existing asset list');
+              assert(Array.isArray(assetRequests), 'Invalid image requests');
+              const requestedIds = new Set(assetRequests.map(r=>r.id));
+              const selected = assetIds.filter(id=>!requestedIds.has(id)).map(id => { const a = availableAssets.find(a => a.id === id); assert(a, `Unknown image alias '${id}'. Available IDs: ${availableAssets.map(a=>a.id).join(', ') || '(none)'}. New IDs must be declared in assetRequests.`); return a; });
+              assert(Array.isArray(assetRequests) && selected.length + assetRequests.length <= 16, '素材数量超限');
+              assert(!assetRequests.length || pkg.sdkVersion === 4, 'Image generation requires SDK 4');
+              // Reject invalid code/protocol before spending an image generation call.
+              validateWorldMode(await validatePackage(pkg), baseline.mode);
+              const generated = await this.images.resolve(assetRequests, availableAssets, artSelection, worldId, attemptId, controller.signal);
+              controller.signal.throwIfAborted();
+              return {...pkg,assets:assetIds.length || generated.length ? [...selected,...generated] : pkg.assets};
             }),
-            new Promise<never>((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new Error('生成超时，请重试。')); }, this.generationTimeoutMs); })
+            new Promise<never>((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new Error('生成超时，请重试。')); }, this.generationTimeoutMs ?? (artSelection.artSource === 'seedream' ? 500000 : 125000)); })
           ]);
           if (this.closed) return;
           if (!this.store.attempt(attemptId).response_hash) this.store.db.prepare('UPDATE attempts SET response_hash=? WHERE id=?').run(this.store.put(JSON.stringify(pkg)), attemptId);
@@ -94,6 +118,7 @@ export class WorldService {
           const packageHash = this.store.putJson(pkg);
           this.store.db.prepare('UPDATE attempts SET package_hash=? WHERE id=?').run(packageHash, attemptId);
           validateWorldMode(await validatePackage(pkg), baseline.mode);
+          this.images.verify(pkg, worldId);
           if (this.closed) return;
           this.store.db.transaction(() => {
             this.store.db.prepare("UPDATE attempts SET status='trial',updated_at=? WHERE id=?").run(now(), attemptId);
@@ -140,7 +165,8 @@ export class WorldService {
       const pkg = this.store.json<ScenePackage>(result.packageHash);
       const protocol = await validatePackage(pkg);
       validateWorldMode(protocol, this.store.world(turn.world_id).mode);
-      validateOutput(protocol, result.output);
+      this.images.verify(pkg, turn.world_id);
+      validateOutput(protocol, result.output, pkg.assets);
       const resultHash = this.store.putJson(result);
       const committed = this.store.db.transaction(() => {
         // Re-read after async verification: another client may already have committed.
@@ -171,7 +197,8 @@ export class WorldService {
     const versions = (this.store.db.prepare('SELECT snapshot FROM versions WHERE world_id=? ORDER BY rowid').all(worldId) as { snapshot: string }[]).map(row => JSON.parse(row.snapshot));
     const chunks = this.store.db.prepare('SELECT c.* FROM response_chunks c JOIN attempts a ON c.attempt_id=a.id JOIN turns t ON a.turn_id=t.id WHERE t.world_id=? ORDER BY c.seq').all(worldId);
     const interactions = this.store.db.prepare('SELECT * FROM interactions WHERE world_id=? ORDER BY seq').all(worldId);
-    return { snapshot, turns, attempts, versions, chunks, interactions, playback: this.store.playback(worldId), retention: { months: this.store.retentionMonths, currentWorldRetained: true }, events: this.store.events(worldId, 0, -1) };
+    const images = this.images.list(worldId), imageJobs = this.store.db.prepare('SELECT * FROM image_jobs WHERE world_id=? ORDER BY created_at,id').all(worldId);
+    return { snapshot, turns, attempts, versions, chunks, interactions, images, imageJobs, playback: this.store.playback(worldId), retention: { months: this.store.retentionMonths, currentWorldRetained: true }, events: this.store.events(worldId, 0, -1) };
   }
   private saveSnapshot(snapshot: WorldSnapshot) {
     this.store.db.prepare('INSERT INTO versions(id,world_id,snapshot,expires_at) VALUES (?,?,?,?)').run(snapshot.versionId, snapshot.worldId, canonical(snapshot), this.store.expiryForWorld(snapshot.worldId));
@@ -192,7 +219,7 @@ export class WorldService {
     const pkg = this.store.json<ScenePackage>(baseline.packageHash), protocol = await validatePackage(pkg);
     let failure = receipt.error;
     if (!failure) {
-      try { validateOutput(protocol, receipt.output); }
+      try { this.images.verify(pkg, worldId); validateOutput(protocol, receipt.output, pkg.assets); }
       catch (error) { failure = error instanceof Error ? error.message : 'Invalid interaction output'; }
     }
     const hash = this.store.putJson({ ...receipt, ...(failure ? { error: failure } : {}), event: binding });

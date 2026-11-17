@@ -1,5 +1,6 @@
-import { assert, canonical, record, sha256, utf8Size, type ScenePackage, type WorldSnapshot } from '@and-there-was/scene';
-import { FixtureGenerator, type Generator, type GenerationContext } from './generator';
+import { assert, canonical, record, sha256, utf8Size, type WorldSnapshot } from '@and-there-was/scene';
+import { FixtureGenerator, type Generator, type GenerationContext, type GenerationResult } from './generator';
+import { ART_PROMPT } from './art-prompt';
 
 import { PROMPT_VERSION, SCENE_PROMPT } from './scene-prompt';
 export { PROMPT_VERSION, SCENE_PROMPT } from './scene-prompt';
@@ -17,15 +18,15 @@ export class DeepSeekGenerator implements Generator {
     assert(!url.username && !url.password && !url.search && !url.hash, 'Invalid model endpoint');
     this.id = `deepseek/${this.model}`;
   }
-  async generate(text: string, baseline: WorldSnapshot, context?: GenerationContext): Promise<ScenePackage> {
+  async generate(text: string, baseline: WorldSnapshot, context?: GenerationContext): Promise<GenerationResult> {
     assert(this.options.apiKey.trim(), '请在服务端 .env 配置 DEEPSEEK_API_KEY，然后重启服务。');
     const body = {
-      model: this.model, messages: [{ role: 'system', content: SCENE_PROMPT }, { role: 'user', content: canonical({ worldMode: baseline.mode ?? 'animated', request: text, snapshot: baseline, previousPackage: context?.previousPackage ?? null, previousFailure: context?.previousFailure ?? null }) }],
+      model: this.model, messages: [{ role: 'system', content: SCENE_PROMPT + (context?.artSelection?.artSource ? ART_PROMPT : '') }, { role: 'user', content: canonical({ worldMode: baseline.mode ?? 'animated', request: text, snapshot: baseline, previousPackage: context?.previousPackage ?? null, previousFailure: context?.previousFailure ?? null, ...(context?.artSelection?.artSource ? {artSelection:context.artSelection,availableAssetIds:context.availableAssets?.map(a=>a.id)??[],availableAssets:context.availableAssets??[]} : {}) }) }],
       // The live API rejects JSON output together with safety_check=high.
       // Keep its default checks; every package still passes our schema/runtime gate.
       thinking: { type: 'disabled' }, temperature: 0.2, response_format: { type: 'json_object' }, max_tokens: this.options.maxTokens ?? 16384, stream: true, stream_options: { include_usage: true }
     };
-    context?.request({ adapter: this.id, promptVersion: PROMPT_VERSION, endpoint: this.endpoint, body });
+    context?.request({ adapter: this.id, promptVersion: PROMPT_VERSION+(context?.artSelection?.artSource?'+images-4/2026-11-17.2':''), endpoint: this.endpoint, body });
     const signal = AbortSignal.any([AbortSignal.timeout(this.options.timeoutMs ?? 120000), ...(context ? [context.signal] : [])]);
     let raw = '', rawBytes = 0, buffer = '', pendingArchive = '', lastArchive = Date.now(), content = '', finishReason = '', done = false, status: number | undefined, usage: unknown, responseId: string | undefined;
     const redact = (value: string) => value.replaceAll(this.options.apiKey, '[REDACTED]');
@@ -82,8 +83,9 @@ export class DeepSeekGenerator implements Generator {
       const files = { 'protocol.json': JSON.stringify(value.protocol), 'scene.js': value.script, 'view.json': JSON.stringify(value.view) };
       const hashes: Record<string, string> = {};
       for (const [name, text] of Object.entries(files)) hashes[name] = await sha256(text);
-      assert([2,3].includes(Number(value.protocol.schemaVersion)), 'Unsupported generated SDK');
-      return { formatVersion: 1, sdkVersion: value.protocol.schemaVersion as 2 | 3, entry: 'scene.js', files, hashes, assets: [] };
+      assert([2,3,4].includes(Number(value.protocol.schemaVersion)), 'Unsupported generated SDK');
+      if (context?.artSelection?.artSource) assert(value.protocol.schemaVersion === 4 && Array.isArray(value.assetIds) && Array.isArray(value.assetRequests), '图片世界需要 SDK 4 和素材清单');
+      return { formatVersion: 1, sdkVersion: value.protocol.schemaVersion as 2 | 3 | 4, entry: 'scene.js', files, hashes, assets: [], ...(value.assetIds !== undefined ? {assetIds:value.assetIds as string[]} : {}), ...(value.assetRequests !== undefined ? {assetRequests:value.assetRequests as GenerationResult['assetRequests']} : {}) };
     } catch (error) {
       throw new Error(redact(signal.aborted ? '模型请求超时或已中断，可以重试。' : error instanceof Error ? error.message : String(error)));
     } finally {
