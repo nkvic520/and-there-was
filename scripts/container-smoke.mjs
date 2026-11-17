@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { newQuickJSWASMModuleFromVariant } from 'quickjs-emscripten-core';
 // The smoke client uses the same sandbox as the browser, in a separate process.
 // tsx is a CI/dev dependency, never part of the production container.
@@ -28,11 +29,11 @@ try {
   const snapshot = await api('/api/trials', { attemptId: candidate.attemptId, packageHash: candidate.packageHash, baseVersionId: candidate.baseVersionId, baseRevision: candidate.baseRevision, ok: true, output });
   docker('restart', container); await ready();
   const restored = await api(`/api/worlds/${world.worldId}`);
-  if (JSON.stringify(restored) !== JSON.stringify(snapshot)) throw new Error('Container restart changed the saved world');
+  if (!isDeepStrictEqual(restored, snapshot)) throw new Error('Container restart changed the saved world');
   const response = await fetch(`http://127.0.0.1:3180/api/artifacts/${snapshot.packageHash}`);
   if (!response.ok) throw new Error('Saved package missing');
   const restoredOutput = await executePackage(engine, JSON.parse(await response.text()), restored.state);
-  if (JSON.stringify(restoredOutput.state) !== JSON.stringify(output.state)) throw new Error('Restored code/state mismatch');
+  if (!isDeepStrictEqual(restoredOutput.state, output.state)) throw new Error('Restored code/state mismatch');
   console.log(JSON.stringify({ result: 'passed', worldId: world.worldId, versionId: snapshot.versionId, packageHash: snapshot.packageHash }));
 } finally {
   if (running) docker('rm', '-f', container);
