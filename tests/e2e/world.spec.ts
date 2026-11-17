@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 let server: ChildProcess, dataDirectory: string, serverLog = '';
 async function start() {
   serverLog = '';
-  server = spawn(process.execPath, ['dist/server/main.js'], { cwd: process.cwd(), env: { ...process.env, PORT: '3179', HOST: '127.0.0.1', DATA_DIR: dataDirectory }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  server = spawn(process.execPath, ['apps/server/dist/main.js'], { cwd: process.cwd(), env: { ...process.env, PORT: '3179', HOST: '127.0.0.1', DATA_DIR: dataDirectory }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
   server.stdout?.on('data', chunk => { serverLog += chunk; }); server.stderr?.on('data', chunk => { serverLog += chunk; });
   for (let i = 0; i < 100; i++) {
     if (server.exitCode !== null) throw new Error(serverLog);
