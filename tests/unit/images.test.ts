@@ -77,11 +77,12 @@ it('prevents cross-world and forged image manifests',async()=>{
 });
 it('cooperates across text and image adapters, archives both requests, commits and reuses art on behavior changes',async()=>{
   let textCalls=0,imageCalls=0;
-  const s=await setup({generator:model(()=>{textCalls++;return imageReply('animated',textCalls===1?[]:['new_art'],textCalls===1?[request]:[]);}),imageGenerator:fakeImages(()=>imageCalls++)});
-  const world=s.store.createWorld('animated'),selection:ArtSelection={artSource:'seedream'};
+  const s=await setup({generator:model(()=>{textCalls++;return imageReply('animated',textCalls===1?[]:['new_art'],textCalls===1?[{...request,role:'background'}]:[]);}),imageGenerator:fakeImages(()=>imageCalls++)});
+  const world=s.store.createWorld('animated'),selection:ArtSelection={artSource:'seedream',viewport:{width:1440,height:900}};
   const t=s.service.submit(world.worldId,randomUUID(),'小兔子',selection);const c=s.service.candidate((await waitFor(s,t.id,'trial')).attempt_id!);await commit(s,c);
   expect(c.package.assets[0].source).toBe('seedream');expect(imageCalls).toBe(1);
   const jobs=s.service.records(world.worldId).imageJobs as Record<string,string>[];expect(jobs).toHaveLength(1);
+  expect(JSON.parse(s.store.read(jobs[0].request_hash)).body).toMatchObject({size:'2K', prompt:expect.stringContaining('1440x900 CSS pixels (landscape')});
   expect(s.store.read(jobs[0].request_hash)).toContain('b64_json');expect(s.store.read(jobs[0].response_hash)).toContain('b64_json');
   expect(s.store.read(jobs[0].request_hash)+s.store.read(jobs[0].response_hash)).not.toContain('private-test-image-key');
   const t2=s.service.submit(world.worldId,randomUUID(),'跳慢一点',selection);const c2=s.service.candidate((await waitFor(s,t2.id,'trial')).attempt_id!);await commit(s,c2);

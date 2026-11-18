@@ -86,7 +86,7 @@ export class Images {
         const bytes=await this.generator.generate(r,refs,signal,{
           request:value=>{if(!signal.aborted)this.store.db.prepare('UPDATE image_jobs SET request_hash=? WHERE id=?').run(this.store.putJson(value),jobId);},
           response:value=>{if(this.store.db.open)this.store.db.prepare('UPDATE image_jobs SET response_hash=? WHERE id=?').run(this.store.putJson(value),jobId);}
-        });
+        }, r.role === 'background' ? selection.viewport : undefined);
         signal.throwIfAborted();const image=await this.add(bytes,{name:r.name,role:r.role,source:this.generator.provider,credit:this.generator.id},worldId);
         this.store.db.prepare("UPDATE image_jobs SET status='completed',image_id=? WHERE id=?").run(image.imageId,jobId);
         produced.push({...image,id:r.id});

@@ -28,6 +28,10 @@ export class WorldService {
   schedule(worldId: string) { queueMicrotask(() => { if (!this.closed) void this.pump(worldId); }); }
   submit(worldId: string, clientId: string, text: string, selection: ArtSelection = {}, uiLocale: Locale = 'zh-CN'): TurnRow {
     if (!isLocale(uiLocale)) throw new HttpError(400, 'Unsupported interface language');
+    const size = selection.viewport;
+    if (size !== undefined && (!size || ![size.width, size.height].every(n => Number.isInteger(n) && n > 0 && n <= 65535))) {
+      throw new HttpError(400, 'Invalid canvas dimensions');
+    }
     this.store.world(worldId);
     if (selection.artSource !== undefined && !['library','ai','seedream'].includes(selection.artSource) || selection.referenceProvider !== undefined && !['openai','seedream'].includes(selection.referenceProvider) || selection.assetIds !== undefined && (!Array.isArray(selection.assetIds) || selection.assetIds.length > 16 || selection.assetIds.some(id => typeof id !== 'string' || !/^[\w-]{1,80}$/.test(id))) || selection.allowUploadReferences !== undefined && typeof selection.allowUploadReferences !== 'boolean') throw new HttpError(400,'Invalid art selection');
     const submittedAssets = this.images.available(worldId, selection);

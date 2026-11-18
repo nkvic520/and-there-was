@@ -34,10 +34,29 @@ export class FixtureGenerator implements Generator {
       const selected=context.availableAssets.filter(a=>context.artSelection?.assetIds?.includes(a.imageId));
       const assets=(selected.length?selected:[context.availableAssets[0]]).slice(0,4), mode=baseline.mode;
       const protocol={schemaVersion:4,mode,stateSchema:{type:'object',properties:{taps:{type:'integer',minimum:0,maximum:100000}},required:['taps'],additionalProperties:false},events:mode==='animated'?{tap:{type:'object',properties:{},additionalProperties:false}}:{}};
-      const files={'protocol.json':JSON.stringify(protocol),'view.json':JSON.stringify({coordinates:'normalized',background:'#fcfaf5',mode}),
-        'scene.js':`export function migrate(sdk){const s=sdk.getState();sdk.setState({taps:s.taps||0});}
-export function mount(sdk){const images=${JSON.stringify(assets.map(a=>a.id))};const s=sdk.getState();images.forEach((asset,i)=>{const id='art_'+i;sdk.node({id,kind:'sprite',asset,x:images.length===1?.5:.3+(i%2)*.4,y:images.length<=2?.5:.3+Math.floor(i/2)*.4,width:images.length===1?.65:.35,height:images.length===1?.65:.35${mode==='animated'?",motionKey:String(s.taps),motions:[{duration:2,loop:'pingpong',frames:[{at:0,y:-.03},{at:1,y:.03}]},{duration:.7,loop:'once',frames:[{at:0,scaleX:1,scaleY:1},{at:.4,scaleX:1.1,scaleY:1.1},{at:1,scaleX:1,scaleY:1}]}]":""}});${mode==='animated'?"sdk.onTap(id,'tap',{});":""}});}
-export function onEvent(sdk){const s=sdk.getState();s.taps=Math.min(100000,s.taps+1);sdk.setState(s);}`};
+      const background = mode === 'animated' ? assets.find(a => a.role === 'background') : undefined;
+      const subjects = assets.filter(a => a !== background);
+      const images = subjects.map((asset, i) => ({
+        id: 'art_' + i, asset: asset.id, x: subjects.length === 1 ? .5 : .3 + (i % 2) * .4,
+        y: subjects.length <= 2 ? .5 : .3 + Math.floor(i / 2) * .4, width: subjects.length === 1 ? .65 : .35
+      }));
+      const view = {coordinates:'normalized', background:'#fcfaf5', mode, ...(mode === 'animated' ? {layout:'viewport'} : {})};
+      const files = {
+        'protocol.json': JSON.stringify(protocol), 'view.json': JSON.stringify(view),
+        'scene.js': `const subjects = ${JSON.stringify(images)};
+export function migrate(sdk) { const s = sdk.getState(); sdk.setState({taps:s.taps || 0}); }
+export function mount(sdk) {
+  ${background ? `sdk.node({id:'backdrop',kind:'sprite',asset:${JSON.stringify(background.id)},x:.5,y:.5,width:1,height:1});
+  sdk.onTap('backdrop','tap',{});` : ''}
+  for (const image of subjects) {
+    sdk.node({...image, kind:'sprite'${mode === 'animated' ? `, motionKey:String(sdk.getState().taps),
+      motions:[{duration:2,loop:'pingpong',frames:[{at:0,y:-.03},{at:1,y:.03}]},
+        {duration:.7,loop:'once',frames:[{at:0,scaleX:1,scaleY:1},{at:.4,scaleX:1.1,scaleY:1.1},{at:1,scaleX:1,scaleY:1}]}]` : ''}});
+    ${mode === 'animated' ? "sdk.onTap(image.id,'tap',{});" : ''}
+  }
+}
+export function onEvent(sdk) { const s = sdk.getState(); s.taps = Math.min(100000,s.taps + 1); sdk.setState(s); }`
+      };
       const hashes:Record<string,string>={};for(const [name,content]of Object.entries(files))hashes[name]=await sha256(content);
       return {storyLocale,formatVersion:1,sdkVersion:4,entry:'scene.js',files,hashes,assets};
     }

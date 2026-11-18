@@ -6,18 +6,20 @@
 
 Open the home page to create an empty world. Type **There is a ball** and click the arrow to send it. Choosing a word with an input method or pressing Enter does not send the sentence; use the send button.
 
+The canvas fills the browser window. After the scene appears, choose **Keep creating** to open the writing box again. You can fold it away while playing and return to your draft.
+
 The address becomes `/w/<worldId>`. Save or bookmark the **whole address** to return to that work. Opening the home page creates another world. A saved world can be reopened after a service restart as long as its data is kept.
 
-Use the globe in the corner to choose a menu language. The app remembers it on this device. On a first visit it checks your browser languages and falls back to English. The sample input and artwork picker show phrases you can send in the selected language.
+Open the world menu in the upper right and choose **Language**. The app remembers it on this device. On a first visit it checks your browser languages and falls back to English. The sample input and artwork picker show phrases you can send in the selected language.
 
 The first meaningful sentence sets the language of a new story. For a name such as “Milo” or an emoji, the app uses the menu language. A world keeps its story language as you edit it or open it on another device. To change the language of the work, ask explicitly, for example “Tell this story in Japanese.” Titles and narration follow the story language. Your submitted sentences and the names you give uploaded drawings are saved as written.
 
 ## Choose a world type
 
-- **Animation** — a world with ongoing movement and click or touch interactions. Use **Pause animation** to pause and **Play animation** to resume.
+- **Animation** — a world with ongoing movement and click or touch interactions. Open the world menu and use **Pause animation** to pause and **Play animation** to resume.
 - **Comic / picture book** — a still illustration or comic page with text.
 
-Choose a type when starting a world. Use **New world** to create a different kind of work. If your device prefers reduced motion, animation starts paused and can be resumed with the play button.
+Choose a type when starting a world. Use **New world** in the world menu to create a different kind of work. If your device prefers reduced motion, animation starts paused and can be resumed with the play button.
 
 ## Free-form creation
 
@@ -33,7 +35,7 @@ Open the artwork selector below the input box. This choice is independent of the
 
 ### AI artwork
 
-OpenAI provides both scene creation and artwork with one key. When using DeepSeek for scenes, configure Seedream for artwork. New environments and characters can be drawn separately so the characters can move. Existing pictures can be reused for motion changes. An image character can move, scale, rotate and react to a click; a single image does not provide articulated limb animation.
+OpenAI provides both scene creation and artwork with one key. When using DeepSeek for scenes, configure Seedream for artwork. The canvas can stay plain. When a new background is needed, the image model receives the canvas dimensions at the time you send your sentence. Turning your device reframes the saved scenery. Characters can move separately from it. Existing pictures can be reused for motion changes. An image character can move, scale, rotate and react to a click; a single image does not provide articulated limb animation.
 
 ### Assets / my artwork
 
@@ -110,7 +112,7 @@ After an update or restart, reopen the complete world link rather than the home 
 
 Real records are kept for **three calendar months per record**. The current work and the files it needs remain available. Expired inputs, model requests and responses, and unneeded history are cleaned up automatically. Unused uploaded or generated images also expire after three months; images and originals still used by the current work are retained. Bundled samples are retained unless used with real uploaded material. Copies in your own backups and provider-side records follow their own retention rules.
 
-The owner can open `/inspect/<worldId>` to view saved inputs, generated content and versions, including image sources and original-image downloads. This is an owner’s view, separate from the creation screen.
+Choose **World history** in the world menu, or open `/inspect/<worldId>`, to view saved inputs, generated content and versions, including image sources and original-image downloads. This is an owner’s view, separate from the creation screen.
 
 ## Common questions
 

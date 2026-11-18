@@ -80,9 +80,14 @@ it('uses Images generations for new artwork and Images edits for authorized refe
     return Response.json({data:[{b64_json:png.toString('base64')}],usage:{total_tokens:125}});
   }});
   const request={id:'actor',name:'Rabbit',role:'character' as const,prompt:'A small rabbit.'};
-  await expect(generator.generate(request,[],t.context.signal,t.context)).resolves.toEqual(png);
-  await generator.generate({...request,role:'background'},[png],t.context.signal,t.context);
-  expect(seen[0]).toMatchObject({url:'https://api.openai.com/v1/images/generations',body:{quality:'medium',n:1,output_format:'png',background:'transparent'}});
+  const viewport = {width:390,height:844};
+  await expect(generator.generate(request,[],t.context.signal,t.context,viewport)).resolves.toEqual(png);
+  await generator.generate({...request,role:'background'},[png],t.context.signal,t.context,viewport);
+  expect(seen[0]).toMatchObject({url:'https://api.openai.com/v1/images/generations',body:{size:'1024x1024',prompt:request.prompt,quality:'medium',n:1,output_format:'png',background:'transparent'}});
+  expect(seen[1].body.prompt).toContain('390x844 CSS pixels (portrait');
+  const [width,height] = String(seen[1].body.size).split('x').map(Number);
+  expect(width % 16 + height % 16).toBe(0);
+  expect(width / height).toBeCloseTo(390 / 844, 2);
   expect(seen[0].body).not.toHaveProperty('images');
   expect(seen[1]).toMatchObject({url:'https://api.openai.com/v1/images/edits',body:{background:'opaque',images:[{image_url:'data:image/png;base64,'+png.toString('base64')}]}});
   expect(t.responses[1]).toMatchObject({provider:generator.id,usage:{total_tokens:125}});

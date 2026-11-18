@@ -1,4 +1,8 @@
 {
+  "worldMenu": "세계 메뉴",
+  "history": "세계 기록",
+  "keepWriting": "이어서 쓰기",
+  "hideComposer": "입력창 접기",
   "language": "언어",
   "brand": "And There Was…",
   "description": "한 문장으로 작은 세상을 만들어요.",

@@ -72,7 +72,11 @@ export async function createApp(options: { dataDir: string; generator?: Generato
     };
   });
   app.post<{ Params: { id: string }; Body: { text: string; clientSubmissionId: string; uiLocale?: Locale } & ArtSelection }>('/api/worlds/:id/turns', {
-    schema: { body: { type: 'object', additionalProperties: false, required: ['text', 'clientSubmissionId'], properties: { text: { type: 'string', minLength: 1, maxLength: 2000 }, clientSubmissionId: { type: 'string', minLength: 8, maxLength: 100 }, artSource:{type:'string',enum:['library','ai','seedream']},assetIds:{type:'array',maxItems:16,uniqueItems:true,items:{type:'string',pattern:'^[a-zA-Z0-9_-]{1,80}$'}},allowUploadReferences:{type:'boolean'},referenceProvider:{type:'string',enum:['seedream','openai']},uiLocale:{type:'string',enum:locales} } } }
+    schema: { body: { type: 'object', additionalProperties: false, required: ['text', 'clientSubmissionId'], properties: { text: { type: 'string', minLength: 1, maxLength: 2000 }, clientSubmissionId: { type: 'string', minLength: 8, maxLength: 100 }, artSource:{type:'string',enum:['library','ai','seedream']},assetIds:{type:'array',maxItems:16,uniqueItems:true,items:{type:'string',pattern:'^[a-zA-Z0-9_-]{1,80}$'}},allowUploadReferences:{type:'boolean'},referenceProvider:{type:'string',enum:['seedream','openai']},uiLocale:{type:'string',enum:locales},
+      viewport: {type:'object', additionalProperties:false, required:['width','height'], properties:{
+        width:{type:'integer',minimum:1,maximum:65535}, height:{type:'integer',minimum:1,maximum:65535}
+      }}
+    } } }
   }, async (request, reply) => { const {text,clientSubmissionId,uiLocale,...selection}=request.body; return reply.code(202).send(service.submit(request.params.id,clientSubmissionId,text,selection,uiLocale)); });
   app.post<{ Params: { id: string } }>('/api/turns/:id/retry', async request => service.retry(request.params.id));
   app.post<{ Params: { id: string }; Body: InteractionReceipt }>('/api/worlds/:id/interactions', async request => {

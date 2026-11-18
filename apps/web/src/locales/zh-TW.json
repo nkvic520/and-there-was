@@ -1,4 +1,8 @@
 {
+  "worldMenu": "世界選單",
+  "history": "歷史紀錄",
+  "keepWriting": "繼續說",
+  "hideComposer": "收合輸入框",
   "language": "語言",
   "brand": "就有了",
   "description": "寫一句話，創造一個小世界。",

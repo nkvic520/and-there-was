@@ -1,4 +1,8 @@
 {
+  "worldMenu": "世界のメニュー",
+  "history": "世界の履歴",
+  "keepWriting": "続きを書く",
+  "hideComposer": "入力欄を閉じる",
   "language": "言語",
   "brand": "And There Was…",
   "description": "ひとことで、小さな世界をつくろう。",

@@ -18,4 +18,5 @@ export interface SceneAsset {
   sourceUrl?: string;
 }
 export interface AssetRequest { id:string; name:string; role:ImageRole; prompt:string; references?:string[] }
-export interface ArtSelection { artSource?:ArtSource; assetIds?:string[]; allowUploadReferences?:boolean; referenceProvider?:ImageProvider }
+export interface CanvasSize { width: number; height: number }
+export interface ArtSelection { artSource?:ArtSource; assetIds?:string[]; allowUploadReferences?:boolean; referenceProvider?:ImageProvider; viewport?:CanvasSize }

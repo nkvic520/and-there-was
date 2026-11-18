@@ -1,9 +1,10 @@
-import { test, expect, type Browser } from '@playwright/test';
+import { test, expect, type Browser, type Page } from '@playwright/test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:http';
+import sharp from 'sharp';
 import { modelReply, streamReply, animatedReply, withImageWorkflow } from '../helpers/interactive';
 import { Store } from '../../apps/server/src/store';
 import { addCalendarMonths } from '@and-there-was/scene';
@@ -38,7 +39,11 @@ test.afterAll(async () => {
 test.use({ locale: 'zh-CN' });
 
 async function freshContext(browser: Browser, projectUse: Record<string, unknown>) {
-  return browser.newContext({ locale: 'zh-CN', viewport: projectUse.viewport as { width: number; height: number } | undefined, isMobile: Boolean(projectUse.isMobile), hasTouch: Boolean(projectUse.hasTouch) });
+  return browser.newContext({ locale: 'zh-CN', viewport: projectUse.viewport as { width: number; height: number } | undefined, deviceScaleFactor: projectUse.deviceScaleFactor as number | undefined, isMobile: Boolean(projectUse.isMobile), hasTouch: Boolean(projectUse.hasTouch) });
+}
+
+function scenePixels(page: Page) {
+  return page.locator('canvas').screenshot({ style: '#menu-toggle, #world-menu, .composer-wrap { visibility: hidden !important; }' });
 }
 
 test('real fixture → isolated worker → saved scene → fresh-browser restore after process restart', async ({ page, browser, request }, info) => {
@@ -48,6 +53,12 @@ test('real fixture → isolated worker → saved scene → fresh-browser restore
   await page.goto('/'); await expect(page.locator('#app')).toHaveAttribute('data-revision', '0');
   const worldUrl = page.url(), worldId = worldUrl.split('/').at(-1)!;
   const canvas = await page.locator('canvas').elementHandle();
+  const fullCanvas = () => page.locator('canvas').evaluate(el => {
+    const box = el.getBoundingClientRect();
+    return box.x === 0 && box.y === 0 && box.width === innerWidth && box.height === innerHeight;
+  });
+  expect(await fullCanvas()).toBe(true);
+  await expect(page.getByRole('link', {name:'历史记录'})).toBeHidden();
   await page.screenshot({ path: info.outputPath('empty.png') });
   await page.getByRole('textbox').fill('有一个球');
   // Browser composition events plus Enter must never submit. OS IME gets a separate manual check.
@@ -67,6 +78,9 @@ test('real fixture → isolated worker → saved scene → fresh-browser restore
   release();
   await expect(page.locator('#app')).toHaveAttribute('data-revision', '1');
   const firstVisibleMs = performance.now() - started;
+  await expect(page.getByRole('button', {name:'继续说'})).toBeVisible();
+  await expect(page.getByRole('textbox')).toBeHidden();
+  expect(await fullCanvas()).toBe(true);
   expect(await canvas!.evaluate(node => node === document.querySelector('canvas'))).toBe(true);
   await expect(page.locator('#canvas')).toHaveAttribute('data-operation-count', '3');
   expect(await page.locator('canvas').count()).toBe(1);
@@ -77,7 +91,9 @@ test('real fixture → isolated worker → saved scene → fresh-browser restore
   const snapshot = records.snapshot;
   const pkgResponse = await request.get(`/api/artifacts/${snapshot.packageHash}`);
   const pkg = JSON.parse(await pkgResponse.text()); expect(pkg.files['scene.js']).toContain('export function mount');
-  await page.goto(`/inspect/${worldId}`); await expect(page.getByRole('heading', { name: '世界档案' })).toBeVisible();
+  await page.getByRole('button', {name:'世界菜单'}).click();
+  await page.getByRole('link', {name:'历史记录'}).click();
+  await expect(page).toHaveURL(`/inspect/${worldId}`); await expect(page.getByRole('heading', { name: '世界档案' })).toBeVisible();
   await expect(page.locator('details').filter({ has: page.locator('summary').filter({ hasText: /^scene\.js$/ }) }).locator('pre')).toBeVisible();
   await page.close(); await stop(); await start();
   const context = await freshContext(browser, info.project.use), restored = await context.newPage();
@@ -94,31 +110,92 @@ test('real fixture → isolated worker → saved scene → fresh-browser restore
   await context.close();
 });
 
+test('edge-to-edge scenery reframes in both orientations and keeps the same draft, actors and history', async ({page, request}, info) => {
+  await page.setViewportSize({width:1200, height:500});
+  await page.goto('/');
+  const app = page.locator('#app'), input = page.locator('#thought');
+  await expect(app).toHaveAttribute('data-revision', '0');
+  const id = page.url().split('/').at(-1)!;
+  await page.locator('#art-trigger').click();
+  for (const name of ['森林背景', '小兔贴纸', '猫头鹰贴纸']) await page.getByRole('checkbox', {name, exact:true}).check();
+  await page.locator('.art-close').click();
+  await input.fill('使用选中的素材'); await page.locator('#send').click();
+  await expect(app).toHaveAttribute('data-revision', '1');
+  let revision = 1;
+  let version = await app.getAttribute('data-version-id');
+  for (const [width, height] of [[1200,500], [390,844]]) {
+    await page.setViewportSize({width, height});
+    await expect.poll(() => page.locator('canvas').boundingBox()).toEqual({x:0,y:0,width,height});
+    // Sample the actual rendered scenery outside the old square stage on either axis.
+    const {data,info:pixel} = await sharp(await scenePixels(page)).resize(100,100,{fit:'fill'}).removeAlpha().raw().toBuffer({resolveWithObject:true});
+    for (const [x,y] of [[2,50],[97,50],[50,2],[50,97]]) {
+      const start = (y * 100 + x) * pixel.channels;
+      expect([...data.subarray(start, start + 3)]).not.toEqual([252,250,245]);
+    }
+    await page.screenshot({path:info.outputPath(`forest-${width}x${height}.png`)});
+    await expect(app).toHaveAttribute('data-version-id', version!);
+    const x = width * .3, y = height * .5;
+    if (info.project.use.hasTouch) await page.touchscreen.tap(x,y); else await page.mouse.click(x,y);
+    await expect(app).toHaveAttribute('data-revision', String(++revision));
+    version = await app.getAttribute('data-version-id');
+  }
+  await page.locator('#continue').click();
+  await expect(input).toBeFocused(); await input.fill('还没写完');
+  if (info.project.use.isMobile) {
+    // Emulate the visual viewport event an overlay keyboard sends while the layout viewport stays put.
+    const keyboardTop = await page.evaluate(() => {
+      const viewport = window.visualViewport!;
+      const height = viewport.height - 260;
+      Object.defineProperty(viewport, 'height', { configurable:true, value:height });
+      viewport.dispatchEvent(new Event('resize'));
+      return height;
+    });
+    const box = (await input.boundingBox())!;
+    expect(box.y).toBeGreaterThan(0); expect(box.y + box.height).toBeLessThan(keyboardTop);
+    expect(await page.locator('canvas').boundingBox()).toEqual({x:0,y:0,width:390,height:844});
+    await page.evaluate(() => {
+      Reflect.deleteProperty(window.visualViewport!, 'height');
+      window.visualViewport!.dispatchEvent(new Event('resize'));
+    });
+  }
+  await page.locator('#fold').click(); await page.locator('#continue').click();
+  await expect(input).toHaveValue('还没写完'); await input.press('Escape');
+  await expect(input).toBeHidden();
+  await page.locator('#menu-toggle').click(); await expect(page.getByRole('link',{name:'历史记录'})).toBeVisible();
+  await page.keyboard.press('Escape'); await expect(page.locator('#world-menu')).toBeHidden();
+  const records = await (await request.get('/api/worlds/' + id + '/records')).json();
+  expect(records.turns).toHaveLength(1); expect(records.imageJobs).toHaveLength(0);
+  expect(JSON.parse(records.turns[0].art_selection).viewport).toEqual({width:1200,height:500});
+  expect(records.snapshot.state.taps).toBe(2);
+  expect(records.interactions.map((event: {target_id:string}) => event.target_id)).toEqual(['art_0','art_0']);
+});
+
 test('animation changes actual pixels, pauses and resumes from a saved clock after restart', async ({page,browser,request},info) => {
   const failures:string[]=[]; page.on('pageerror',error=>failures.push(error.message));
   await page.goto('/'); await expect(page.locator('#app')).toHaveAttribute('data-revision','0');
   await page.getByRole('textbox').fill('有一个球'); await page.getByRole('button',{name:'发送',exact:true}).click();
   await expect(page.locator('#app')).toHaveAttribute('data-revision','1');
-  const worldUrl=page.url(), id=worldUrl.split('/').at(-1)!, canvas=page.locator('canvas');
+  const worldUrl=page.url(), id=worldUrl.split('/').at(-1)!;
   await expect(page.locator('#canvas')).toHaveAttribute('data-animated-nodes','3');
   await expect.poll(async()=>Number(await page.locator('#canvas').getAttribute('data-animation-time'))).toBeGreaterThan(850);
-  const first=await canvas.screenshot();
-  await expect.poll(async()=>Buffer.compare(first,await canvas.screenshot())).not.toBe(0);
+  const first=await scenePixels(page);
+  await expect.poll(async()=>Buffer.compare(first,await scenePixels(page))).not.toBe(0);
   const checkpoint=page.waitForResponse(r=>r.request().method()==='POST' && r.url().endsWith('/playback') && r.ok());
-  await page.getByRole('button',{name:'暂停动画'}).click(); await checkpoint;
+  await page.locator('#menu-toggle').click(); await page.getByRole('button',{name:'暂停动画'}).click(); await checkpoint;
   await expect(page.locator('#canvas')).toHaveAttribute('data-animation-paused','true');
   await expect.poll(async()=>(await (await request.get(`/api/worlds/${id}/playback`)).json()).paused).toBe(true);
-  const before=await (await request.get(`/api/worlds/${id}/records`)).json(), still=await canvas.screenshot();
+  const before=await (await request.get(`/api/worlds/${id}/records`)).json(), still=await scenePixels(page);
   // Observe several actual paint frames after pausing; this is a visual invariant, not only a DOM flag.
   await page.evaluate(()=>new Promise<void>(resolve=>{let n=0;function f(){if(++n===20)resolve();else requestAnimationFrame(f);}requestAnimationFrame(f);}));
-  expect(await canvas.screenshot()).toEqual(still);
+  expect(await scenePixels(page)).toEqual(still);
   await page.screenshot({path:info.outputPath('animated-paused.png')});
   await page.close(); await stop(); await start();
   const context=await freshContext(browser,info.project.use), restored=await context.newPage();
   restored.on('pageerror',error=>failures.push(error.message));
   await restored.goto(worldUrl); await expect(restored.locator('#app')).toHaveAttribute('data-version-id',before.snapshot.versionId);
+  await restored.locator('#menu-toggle').click();
   await expect(restored.getByRole('button',{name:'播放动画'})).toBeVisible();
-  expect(await restored.locator('canvas').screenshot()).toEqual(still);
+  expect(await scenePixels(restored)).toEqual(still);
   const after=await (await request.get(`/api/worlds/${id}/records`)).json();
   expect(after.playback).toEqual(before.playback); expect(after.snapshot).toEqual(before.snapshot); expect(after.versions).toHaveLength(2);
   await restored.getByRole('button',{name:'播放动画'}).click();
@@ -129,7 +206,7 @@ test('animation changes actual pixels, pauses and resumes from a saved clock aft
 test('storybook selection produces a still illustrated page and survives fresh-browser restart', async ({page,browser,request},info) => {
   const failures:string[]=[]; page.on('pageerror',error=>failures.push(error.message));
   await page.goto('/'); await expect(page.locator('#app')).toHaveAttribute('data-revision','0');
-  await page.getByRole('link',{name:'▤ 静态漫画／绘本'}).click();
+  await page.getByRole('link',{name:'静态漫画／绘本'}).click();
   await expect(page.locator('#app')).toHaveAttribute('data-mode','storybook');
   const worldUrl=page.url(), id=worldUrl.split('/').at(-1)!;
   await page.getByRole('textbox').fill('有一个球'); await page.getByRole('button',{name:'发送',exact:true}).click();
@@ -138,14 +215,14 @@ test('storybook selection produces a still illustrated page and survives fresh-b
   await expect(page.locator('#pause')).toBeHidden();
   const before=await (await request.get(`/api/worlds/${id}/records`)).json();
   expect(before.snapshot.mode).toBe('storybook'); expect(before.snapshot.operations.filter((o:{kind:string})=>o.kind==='text')).toHaveLength(2);
-  const still=await page.locator('canvas').screenshot();
+  const still=await scenePixels(page);
   await page.evaluate(()=>new Promise<void>(resolve=>{let n=0;function f(){if(++n===20)resolve();else requestAnimationFrame(f);}requestAnimationFrame(f);}));
-  expect(await page.locator('canvas').screenshot()).toEqual(still);
+  expect(await scenePixels(page)).toEqual(still);
   await page.screenshot({path:info.outputPath('storybook.png')});
   await page.close(); await stop(); await start();
   const context=await freshContext(browser,info.project.use),restored=await context.newPage();
   await restored.goto(worldUrl); await expect(restored.locator('#app')).toHaveAttribute('data-version-id',before.snapshot.versionId);
-  expect(await restored.locator('canvas').screenshot()).toEqual(still);
+  expect(await scenePixels(restored)).toEqual(still);
   expect((await (await request.get(`/api/worlds/${id}/records`)).json()).snapshot).toEqual(before.snapshot);
   expect(failures).toEqual([]); await context.close();
 });
@@ -164,14 +241,14 @@ test('tapping a composed character restarts its motion and restores the saved cu
     const box=(await page.locator('canvas').boundingBox())!,size=Math.min(box.width,box.height),x=box.x+box.width/2,y=box.y+(box.height-size)/2+.55*size;
     if(info.project.use.hasTouch)await page.touchscreen.tap(x,y);else await page.mouse.click(x,y);
     await expect(page.locator('#app')).toHaveAttribute('data-revision','2');
-    await page.getByRole('button',{name:'暂停动画'}).click();
+    await page.locator('#menu-toggle').click(); await page.getByRole('button',{name:'暂停动画'}).click();
     await expect.poll(async()=>(await (await request.get(`/api/worlds/${id}/playback`)).json()).paused).toBe(true);
     const before=await (await request.get(`/api/worlds/${id}/records`)).json();
     expect(before.snapshot.state.taps).toBe(1);expect(before.playback.cues.actor.key).toBe('1');expect(before.playback.cues.actor.startMs).toBeGreaterThan(2000);
-    const still=await page.locator('canvas').screenshot();await page.close();await stop();await start();
+    const still=await scenePixels(page);await page.close();await stop();await start();
     const context=await freshContext(browser,info.project.use),restored=await context.newPage();
     await restored.goto(url);await expect(restored.locator('#app')).toHaveAttribute('data-revision','2');
-    expect(await restored.locator('canvas').screenshot()).toEqual(still);
+    expect(await scenePixels(restored)).toEqual(still);
     await context.close();
   } finally {await stop();modelEnvironment={};await start();model.closeAllConnections();await new Promise<void>(resolve=>model.close(()=>resolve()));}
 });
@@ -181,6 +258,7 @@ test('failure and retry preserve the ball; repeated successful sentences remain 
   await page.getByRole('textbox').fill('有一个球'); await page.getByRole('button', { name: '发送', exact: true }).click();
   await expect(page.locator('#app')).toHaveAttribute('data-revision', '1');
   const versionId = await page.locator('#app').getAttribute('data-version-id'), worldId = page.url().split('/').at(-1)!;
+  await page.getByRole('button',{name:'继续说'}).click();
   await page.getByRole('textbox').fill('要有光'); await page.getByRole('button', { name: '发送', exact: true }).click();
   await expect(page.getByRole('button', { name: '再试一次' })).toBeVisible();
   expect(await page.locator('#app').getAttribute('data-version-id')).toBe(versionId);
@@ -194,13 +272,22 @@ test('failure and retry preserve the ball; repeated successful sentences remain 
   await expect(page.locator('#canvas')).toHaveAttribute('data-operation-count', '3');
 });
 
-test('lost submission response is retried with the same id', async ({ page, request }) => {
+test('lost submission response is retried with the original id and viewport', async ({ page, request }) => {
   await page.goto('/'); await expect(page.locator('#app')).toHaveAttribute('data-revision', '0');
   const worldId = page.url().split('/').at(-1)!;
-  await page.route('**/api/worlds/*/turns', async route => { await route.fetch(); await route.abort('failed'); }, { times: 1 });
+  const submitted = (await page.locator('canvas').boundingBox())!;
+  const posts: string[] = [];
+  page.on('request', req => { if (req.method() === 'POST' && req.url().endsWith('/turns')) posts.push(req.postData()!); });
+  await page.route('**/api/worlds/*/turns', async route => {
+    await route.fetch();
+    await page.setViewportSize({width:710, height:530});
+    await route.abort('failed');
+  }, { times: 1 });
   await page.getByRole('textbox').fill('有一个球'); await page.getByRole('button', { name: '发送', exact: true }).click();
   await expect(page.locator('#app')).toHaveAttribute('data-revision', '1');
   await expect.poll(async () => page.evaluate(id => localStorage.getItem(`outbox:${id}`), worldId)).toBeNull();
+  expect(posts.length).toBeGreaterThanOrEqual(2); expect(new Set(posts).size).toBe(1);
+  expect(JSON.parse(posts[0]).viewport).toEqual({ width:submitted.width, height:submitted.height });
   expect((await (await request.get(`/api/worlds/${worldId}/records`)).json()).turns).toHaveLength(1);
 });
 
@@ -253,7 +340,10 @@ test('DeepSeek transport, offline taps, lost acknowledgement, restart and protoc
   try {
     await page.goto('/'); await expect(page.locator('#app')).toHaveAttribute('data-revision', '0');
     const worldUrl = page.url(), worldId = worldUrl.split('/').at(-1)!;
-    const submit = async (target: typeof page, text: string) => { await target.getByRole('textbox').fill(text); await target.getByRole('button', { name: '发送', exact: true }).click(); };
+    const submit = async (target: Page, text: string) => {
+      if (await target.locator('#continue').isVisible()) await target.locator('#continue').click();
+      await target.getByRole('textbox').fill(text); await target.getByRole('button', { name: '发送', exact: true }).click();
+    };
     const tap = async (target: typeof page) => {
       const box = (await target.locator('canvas').boundingBox())!, size = Math.min(box.width, box.height);
       const x = box.x + (box.width - size) / 2 + .4 * size, y = box.y + (box.height - size) / 2 + .4 * size;
@@ -314,10 +404,10 @@ test('free artwork animates; a corrupted candidate image keeps the saved scene u
   await page.locator('#art-trigger').click();await page.getByRole('checkbox',{name:'小兔贴纸',exact:true}).check();await page.getByRole('button',{name:'完成素材选择'}).click();
   await page.locator('#thought').fill('使用选中的素材');await page.getByRole('button',{name:'发送',exact:true}).click();
   await expect(page.locator('#app')).toHaveAttribute('data-revision','1');
-  const first=await page.locator('canvas').screenshot();await expect.poll(async()=>Buffer.compare(first,await page.locator('canvas').screenshot())).not.toBe(0);
+  const first=await scenePixels(page);await expect.poll(async()=>Buffer.compare(first,await scenePixels(page))).not.toBe(0);
   const before=await(await request.get(`/api/worlds/${id}/records`)).json();expect(before.snapshot.operations[0].kind).toBe('sprite');expect(before.imageJobs).toHaveLength(0);
   const owl=before.images.find((a:{id:string})=>a.id==='free_owl');
-  await page.locator('#art-trigger').click();await page.getByRole('checkbox',{name:'小兔贴纸',exact:true}).uncheck();await page.getByRole('checkbox',{name:'猫头鹰贴纸',exact:true}).check();await page.getByRole('button',{name:'完成素材选择'}).click();
+  await page.locator('#continue').click();await page.locator('#art-trigger').click();await page.getByRole('checkbox',{name:'小兔贴纸',exact:true}).uncheck();await page.getByRole('checkbox',{name:'猫头鹰贴纸',exact:true}).check();await page.getByRole('button',{name:'完成素材选择'}).click();
   let corrupt=true;await page.route(`**/api/images/${owl.hash}`,async route=>{if(corrupt&&route.request().resourceType()==='fetch'){corrupt=false;await route.fulfill({status:200,body:'corrupted',contentType:'image/png'});}else await route.continue();});
   await page.locator('#thought').fill('使用选中的素材');await page.getByRole('button',{name:'发送',exact:true}).click();
   await expect(page.getByRole('button',{name:'再试一次'})).toBeVisible();
@@ -337,9 +427,9 @@ test('upload stays intact on a still page and restores identical pixels/files in
   await page.locator('#thought').fill('使用选中的素材');await page.getByRole('button',{name:'发送',exact:true}).click();await expect(page.locator('#app')).toHaveAttribute('data-revision','1');
   const before=await(await request.get(`/api/worlds/${id}/records`)).json(),upload=before.images.find((a:{source:string})=>a.source==='upload');
   await expect((await request.get(`/api/images/${upload.imageId}/original`)).body()).resolves.toEqual(readFileSync('fixtures/library/rabbit.png'));
-  const still=await page.locator('canvas').screenshot();await page.screenshot({path:info.outputPath('uploaded-storybook.png')});await page.close();await stop();await start();
+  const still=await scenePixels(page);await page.screenshot({path:info.outputPath('uploaded-storybook.png')});await page.close();await stop();await start();
   const context=await freshContext(browser,info.project.use),restored=await context.newPage();await restored.goto(url);
-  await expect(restored.locator('#app')).toHaveAttribute('data-version-id',before.snapshot.versionId);expect(await restored.locator('canvas').screenshot()).toEqual(still);
+  await expect(restored.locator('#app')).toHaveAttribute('data-version-id',before.snapshot.versionId);expect(await scenePixels(restored)).toEqual(still);
   const after=await(await request.get(`/api/worlds/${id}/records`)).json();expect(after.snapshot).toEqual(before.snapshot);expect(after.images).toEqual(before.images);expect(after.turns).toHaveLength(1);expect(after.imageJobs).toHaveLength(0);
   await restored.goto(`/inspect/${id}`);await expect(restored.getByRole('img',{name:'上传验收图'})).toBeVisible();await context.close();
 });
@@ -362,7 +452,7 @@ test('Seedream HTTP transport, image decoding, interactive sprites, failure roll
     const box=(await page.locator('canvas').boundingBox())!;if(info.project.use.hasTouch)await page.touchscreen.tap(box.x+box.width/2,box.y+box.height/2);else await page.mouse.click(box.x+box.width/2,box.y+box.height/2);
     await expect(page.locator('#app')).toHaveAttribute('data-revision','2');
     const before=await(await request.get(`/api/worlds/${id}`)).json();expect(before.state.taps).toBe(1);
-    await page.locator('#thought').fill('换一张图片');await page.getByRole('button',{name:'发送',exact:true}).click();await expect(page.getByRole('button',{name:'再试一次'})).toBeVisible();
+    await page.locator('#continue').click();await page.locator('#thought').fill('换一张图片');await page.getByRole('button',{name:'发送',exact:true}).click();await expect(page.getByRole('button',{name:'再试一次'})).toBeVisible();
     expect((await(await request.get(`/api/worlds/${id}`)).json()).versionId).toBe(before.versionId);
     await page.getByRole('button',{name:'再试一次'}).click();await expect(page.locator('#app')).toHaveAttribute('data-revision','3');
     expect(imageCalls).toBe(3);const records=await(await request.get(`/api/worlds/${id}/records`)).json();expect(records.imageJobs.map((j:{status:string})=>j.status)).toEqual(['completed','failed','completed']);
@@ -378,6 +468,7 @@ test('menu languages preserve drafts and the current world across devices and a 
   const url = page.url(), worldId = url.split('/').at(-1)!;
   const canvas = await page.locator('canvas').elementHandle();
   await input.fill('draft / 草稿');
+  await page.locator('#menu-toggle').click();
   for (const locale of locales) {
     await picker.selectOption(locale);
     await expect(page.locator('html')).toHaveAttribute('lang', locale);
@@ -390,6 +481,7 @@ test('menu languages preserve drafts and the current world across devices and a 
     })).toBe(true);
   }
   await picker.selectOption('en');
+  await page.keyboard.press('Escape');
   await page.locator('#art-trigger').click();
   await expect(page.getByRole('checkbox', { name:'Rabbit sticker', exact:true })).toBeVisible();
   await expect(page.getByText(/Choose pictures, then send/)).toContainText(languages.en.assets);
@@ -402,7 +494,7 @@ test('menu languages preserve drafts and the current world across devices and a 
   expect(before.snapshot.storyLocale).toBe('ja');
   expect(before.snapshot.operations.map((op:{text?:string}) => op.text)).toContain(languages.ja.title);
   expect(before.turns[0]).toMatchObject({text:'  ' + languages.ja.ball + '  ',ui_locale:'en'});
-  await picker.selectOption('de');
+  await page.locator('#menu-toggle').click(); await picker.selectOption('de');
   expect(await canvas!.evaluate(c => c === document.querySelector('canvas'))).toBe(true);
   await page.reload();
   await expect(picker).toHaveValue('de');
@@ -464,18 +556,18 @@ test('OpenAI credit routing, named reference permission, image reuse and restart
     await consent.locator('input').check();await page.locator('.art-close').click();
     await page.locator('#thought').fill('用我选中的兔子作参考图');await page.locator('#send').click();
     await expect(page.locator('#app')).toHaveAttribute('data-revision','1');
-    await page.locator('#thought').fill('让它动一下');await page.locator('#send').click();
+    await page.locator('#continue').click();await page.locator('#thought').fill('让它动一下');await page.locator('#send').click();
     await expect(page.locator('#app')).toHaveAttribute('data-revision','2');expect(imageCalls).toBe(1);
     const saved=await(await request.get('/api/worlds/'+world)).json();
     const records=await(await request.get('/api/worlds/'+world+'/records')).json();
     expect(JSON.parse(records.turns[0].art_selection)).toMatchObject({allowUploadReferences:true,referenceProvider:'openai'});
     expect(JSON.parse(records.turns[1].art_selection).allowUploadReferences).toBe(false);
-    quota=true;await page.locator('#thought').fill('再加点阳光');await page.locator('#send').click();
+    quota=true;await page.locator('#continue').click();await page.locator('#thought').fill('再加点阳光');await page.locator('#send').click();
     await expect(page.getByText(/OpenAI 额度已用完/)).toBeVisible();expect(textCalls).toBe(3);expect(imageCalls).toBe(1);
     expect(await(await request.get('/api/worlds/'+world)).json()).toEqual(saved);
     await stop();modelEnvironment={GENERATOR_MODE:'deepseek',DEEPSEEK_API_KEY:'old-text',SEEDREAM_API_KEY:'old-image'};await start();
     await page.goto(url);await expect(page.locator('#app')).toHaveAttribute('data-version-id',saved.versionId);
-    await page.locator('#art-trigger').click();await expect(consent).toContainText('Seedream');await expect(consent.locator('input')).not.toBeChecked();
+    await page.locator('#continue').click();await page.locator('#art-trigger').click();await expect(consent).toContainText('Seedream');await expect(consent.locator('input')).not.toBeChecked();
     expect(textCalls).toBe(3);expect(imageCalls).toBe(1);
   }finally{await stop();modelEnvironment={};await start();mock.closeAllConnections();await new Promise<void>(r=>mock.close(()=>r()));}
 });
