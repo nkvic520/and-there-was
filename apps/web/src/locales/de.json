@@ -35,11 +35,11 @@
   "done": "Fertig",
   "artDone": "Bildauswahl abschließen",
   "aiArt": "KI-Bilder",
-  "aiDetail": "Mit Seedream Figuren und Szenen zeichnen.",
+  "aiDetail": "Mit {provider} Figuren und Szenen zeichnen.",
   "library": "Vorlagen / meine Bilder",
   "libraryDetail": "Kostenlose Bilder wählen oder eine Zeichnung hochladen.",
-  "aiNote": "Seedream zeichnet neue Bilder. Für andere Bewegungen kannst du vorhandene Bilder wiederverwenden.",
-  "aiMissing": "Zum Zeichnen neuer Bilder muss Seedream auf dem Server eingerichtet sein.",
+  "aiNote": "{provider} zeichnet neue Bilder. Für andere Bewegungen kannst du vorhandene Bilder wiederverwenden.",
+  "aiMissing": "Zum Zeichnen neuer Bilder muss {provider} auf dem Server eingerichtet sein.",
   "libraryNote": "Kostenlose Bilder von Kenney (CC0). Deine hochgeladenen Bilder bleiben in diesem Modus auf diesem Server.",
   "artHelp": "Die gewählten Bilder werden mit deinem nächsten Satz verwendet.",
   "assetExample": "Wähle Bilder und sende dann „{assets}“.",
@@ -55,7 +55,7 @@
   "illustration": "Ganzseitiges Bild",
   "upload": "Zeichnung hochladen",
   "fileRules": "Statisches PNG, JPEG oder WebP, bis zu 8 MB.",
-  "consent": "Senden der ausgewählten hochgeladenen Zeichnungen als Referenzbilder an Seedream erlauben",
+  "consent": "Senden der ausgewählten hochgeladenen Zeichnungen als Referenzbilder an {provider} erlauben",
   "myArt": "Meine Bilder",
   "maxAssets": "Wähle bis zu 16 Bilder auf einmal.",
   "saving": "Dein Bild wird gespeichert…",
@@ -92,5 +92,8 @@
   "taps": "Maus- und Berührungsprotokoll",
   "versions": "Weltversionen",
   "timeline": "Ereignisverlauf",
-  "retention": "Aufbewahrung des Archivs"
+  "retention": "Aufbewahrung des Archivs",
+  "quota": "Das OpenAI-Guthaben dieser App ist aufgebraucht. Bitte die Person, die sie betreut, den Kontostand zu prüfen.",
+  "providerAccess": "Die App kann das ausgewählte OpenAI-Modell nicht nutzen. Bitte die Person, die sie betreut, die Einstellungen zu prüfen.",
+  "refused": "Versuch, eine andere Szene zu beschreiben."
 }

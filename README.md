@@ -7,9 +7,9 @@ A thought becomes a little world. A canvas for children and the grown-ups creati
 ## What you can do
 
 - Start with an empty canvas and bring a ball into the scene with a sentence.
-- Describe a world, change it with DeepSeek, and add click or touch interactions.
+- Describe a world, change it with OpenAI or DeepSeek, and add click or touch interactions.
 - Choose a lively animated world or a still comic / picture-book page.
-- Create artwork with Seedream, choose free assets, or upload a child’s own drawing.
+- Create artwork with OpenAI or Seedream, choose free assets, or upload a child’s own drawing.
 - Keep the same canvas and return to your work using its saved link.
 
 The app has ten interface languages. It uses your browser preferences or English, and remembers your choice in the language menu on this device. Each saved world has its own story language.
@@ -57,15 +57,16 @@ Set values in `.env` and restart the service after changes. Keep API keys on the
 | `HOST` | Listen address; default `127.0.0.1`. |
 | `PORT` | HTTP port; default `3000`. |
 | `DATA_DIR` | Saved works and records; default `./data`. |
-| `GENERATOR_MODE` | `fixture` for the bundled sample; `deepseek` for free-form creation. |
+| `GENERATOR_MODE` | Automatic selection by default. Use `fixture` for the local examples. |
+| `OPENAI_API_KEY / OPENAI_TEXT_MODEL / OPENAI_IMAGE_MODEL` | Project key, scene model and image model. |
 | `DEEPSEEK_API_KEY / DEEPSEEK_MODEL / DEEPSEEK_BASE_URL` | DeepSeek API key, model and endpoint. |
 | `SEEDREAM_API_KEY / SEEDREAM_MODEL / SEEDREAM_BASE_URL / SEEDREAM_SIZE` | Seedream API key, model, endpoint and image size. |
 
 ### AI services
 
-Enable DeepSeek by setting `GENERATOR_MODE=deepseek` and `DEEPSEEK_API_KEY`. Other connection settings are listed in `.env.example`.
+Set `OPENAI_API_KEY` from your API organization and restart. OpenAI then handles scenes and AI artwork, including when the DeepSeek and Seedream keys are also present.
 
-DeepSeek arranges the scene and interactions. For AI artwork, Seedream draws the images. Free assets and uploads do not call the image model; scene creation in DeepSeek mode still uses the text model.
+With the OpenAI key removed, `DEEPSEEK_API_KEY` enables scene generation and `SEEDREAM_API_KEY` enables optional AI artwork. Free assets and uploaded drawings can be placed directly.
 
 Real model requests may incur provider charges. Existing works can be reopened without generating them again.
 

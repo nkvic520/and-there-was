@@ -9,12 +9,13 @@ import { Store } from '../../apps/server/src/store';
 import { addCalendarMonths } from '@and-there-was/scene';
 import { languages, locales } from '@and-there-was/scene/languages';
 import { imageReply } from '../helpers/images';
+import { responsesWire } from '../helpers/openai';
 
 let server: ChildProcess, dataDirectory: string, serverLog = '';
 let modelEnvironment: Record<string, string> = {};
 async function start() {
   serverLog = '';
-  server = spawn(process.execPath, ['apps/server/dist/main.js'], { cwd: process.cwd(), env: { ...process.env, PORT: '3179', HOST: '127.0.0.1', DATA_DIR: dataDirectory, GENERATOR_MODE: 'fixture', ...modelEnvironment }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  server = spawn(process.execPath, ['apps/server/dist/main.js'], { cwd: process.cwd(), env: { ...process.env, OPENAI_API_KEY:'', DEEPSEEK_API_KEY:'', SEEDREAM_API_KEY:'', PORT: '3179', HOST: '127.0.0.1', DATA_DIR: dataDirectory, GENERATOR_MODE: 'fixture', ...modelEnvironment }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
   server.stdout?.on('data', chunk => { serverLog += chunk; }); server.stderr?.on('data', chunk => { serverLog += chunk; });
   for (let i = 0; i < 100; i++) {
     if (server.exitCode !== null) throw new Error(serverLog);
@@ -421,4 +422,60 @@ test('menu languages preserve drafts and the current world across devices and a 
     expect(after.snapshot).toEqual(before.snapshot);
     expect(after.turns).toHaveLength(1); expect(after.attempts).toHaveLength(1);
   } finally { await context.close(); }
+});
+
+test('OpenAI credit routing, named reference permission, image reuse and restart with a different provider', async ({page,request})=>{
+  let textCalls=0, imageCalls=0, quota=false;
+  const mock=createServer(async(req,res)=>{
+    const chunks:Buffer[]=[];for await(const piece of req)chunks.push(piece);
+    const body=JSON.parse(Buffer.concat(chunks).toString());
+    if(req.url==='/v1/responses'){
+      textCalls++;
+      if(quota){res.writeHead(429,{'Content-Type':'application/json'});res.end(JSON.stringify({error:{code:'credit_balance_exhausted',message:'Test credits used'}}));return;}
+      const input=JSON.parse(body.input), existing=input.availableAssets as {id:string;source:string}[];
+      const ref=existing.find(a=>a.source==='upload')!;
+      const plans=textCalls===1?[{id:'actor',name:'画里的小兔',role:'character' as const,prompt:'a rabbit',references:[ref.id]}]:[];
+      res.writeHead(200,{'Content-Type':'text/event-stream'});res.end(responsesWire(imageReply('animated',['actor'],plans)));return;
+    }
+    if(req.url==='/v1/images/edits'){
+      imageCalls++;
+      expect(body.images[0].image_url).toMatch(/^data:image\/png;base64,/);
+      res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({data:[{b64_json:readFileSync('fixtures/library/rabbit.png').toString('base64')}]}));return;
+    }
+    res.writeHead(404);res.end();
+  });
+  await new Promise<void>(r=>mock.listen(0,'127.0.0.1',r));
+  const port=(mock.address() as {port:number}).port;
+  try {
+    await stop();
+    modelEnvironment={GENERATOR_MODE:'deepseek',OPENAI_API_KEY:'e2e-openai-only',DEEPSEEK_API_KEY:'old-text',SEEDREAM_API_KEY:'old-image',NODE_OPTIONS:'--import=./tests/helpers/openai-loopback.mjs',OPENAI_LOOPBACK_PORT:String(port)};
+    await start();
+    expect((await(await request.get('/api/health')).json()).mode).toBe('openai');
+    await page.goto('/');await expect(page.locator('#app')).toHaveAttribute('data-revision','0');
+    const url=page.url(),world=url.split('/').at(-1)!;
+    await page.locator('#art-trigger').click();
+    await page.locator('.upload-form input[type=file]').setInputFiles('fixtures/library/rabbit.png');
+    await page.locator('input[name=name]').fill('测试小兔');
+    await page.locator('.upload-form button[type=submit]').click();
+    await expect(page.locator('.art-feedback')).toContainText('作品已保存并选中');
+    await page.locator('input[value="ai"]').check();
+    const consent=page.locator('.reference-consent');
+    await expect(consent).toBeVisible();await expect(consent).toContainText('OpenAI');await expect(consent.locator('input')).not.toBeChecked();
+    await consent.locator('input').check();await page.locator('.art-close').click();
+    await page.locator('#thought').fill('用我选中的兔子作参考图');await page.locator('#send').click();
+    await expect(page.locator('#app')).toHaveAttribute('data-revision','1');
+    await page.locator('#thought').fill('让它动一下');await page.locator('#send').click();
+    await expect(page.locator('#app')).toHaveAttribute('data-revision','2');expect(imageCalls).toBe(1);
+    const saved=await(await request.get('/api/worlds/'+world)).json();
+    const records=await(await request.get('/api/worlds/'+world+'/records')).json();
+    expect(JSON.parse(records.turns[0].art_selection)).toMatchObject({allowUploadReferences:true,referenceProvider:'openai'});
+    expect(JSON.parse(records.turns[1].art_selection).allowUploadReferences).toBe(false);
+    quota=true;await page.locator('#thought').fill('再加点阳光');await page.locator('#send').click();
+    await expect(page.getByText(/OpenAI 额度已用完/)).toBeVisible();expect(textCalls).toBe(3);expect(imageCalls).toBe(1);
+    expect(await(await request.get('/api/worlds/'+world)).json()).toEqual(saved);
+    await stop();modelEnvironment={GENERATOR_MODE:'deepseek',DEEPSEEK_API_KEY:'old-text',SEEDREAM_API_KEY:'old-image'};await start();
+    await page.goto(url);await expect(page.locator('#app')).toHaveAttribute('data-version-id',saved.versionId);
+    await page.locator('#art-trigger').click();await expect(consent).toContainText('Seedream');await expect(consent.locator('input')).not.toBeChecked();
+    expect(textCalls).toBe(3);expect(imageCalls).toBe(1);
+  }finally{await stop();modelEnvironment={};await start();mock.closeAllConnections();await new Promise<void>(r=>mock.close(()=>r()));}
 });

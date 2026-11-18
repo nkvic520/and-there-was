@@ -35,11 +35,11 @@
   "done": "Done",
   "artDone": "Finish choosing artwork",
   "aiArt": "AI artwork",
-  "aiDetail": "Draw characters and scenes with Seedream.",
+  "aiDetail": "Draw characters and scenes with {provider}.",
   "library": "Assets / my artwork",
   "libraryDetail": "Choose free pictures or upload a drawing.",
-  "aiNote": "Seedream draws new pictures. Existing pictures can be reused when you change a movement.",
-  "aiMissing": "Set up Seedream on the server to draw new pictures.",
+  "aiNote": "{provider} draws new pictures. Existing pictures can be reused when you change a movement.",
+  "aiMissing": "Set up {provider} on the server to draw new pictures.",
   "libraryNote": "Free pictures by Kenney (CC0). Your uploads stay on this server in this mode.",
   "artHelp": "The pictures you choose go with your next sentence.",
   "assetExample": "Choose pictures, then send “{assets}”.",
@@ -55,7 +55,7 @@
   "illustration": "Full-page drawing",
   "upload": "Upload artwork",
   "fileRules": "Static PNG, JPEG or WebP, up to 8 MB.",
-  "consent": "Allow the selected uploaded drawings to be sent to Seedream as reference images",
+  "consent": "Allow the selected uploaded drawings to be sent to {provider} as reference images",
   "myArt": "My artwork",
   "maxAssets": "Choose up to 16 pictures at a time.",
   "saving": "Saving your artwork…",
@@ -92,5 +92,8 @@
   "taps": "Mouse and touch records",
   "versions": "World versions",
   "timeline": "Event timeline",
-  "retention": "Archive retention"
+  "retention": "Archive retention",
+  "quota": "The OpenAI credits for this app have run out. Ask the person who runs it to check the balance.",
+  "providerAccess": "This app can’t access the selected OpenAI model. Ask the person who runs it to check the settings.",
+  "refused": "Try describing a different scene."
 }

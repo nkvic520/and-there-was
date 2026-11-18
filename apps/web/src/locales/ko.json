@@ -35,11 +35,11 @@
   "done": "완료",
   "artDone": "그림 선택 완료",
   "aiArt": "AI 그림",
-  "aiDetail": "Seedream으로 캐릭터와 장면을 그려요.",
+  "aiDetail": "{provider}으로 캐릭터와 장면을 그려요.",
   "library": "소재 / 내 그림",
   "libraryDetail": "무료 그림을 고르거나 내 그림을 올려요.",
-  "aiNote": "새 그림은 Seedream이 그려요. 동작을 바꿀 때는 기존 그림을 쓸 수 있어요.",
-  "aiMissing": "새 그림을 그리려면 서버에서 Seedream을 설정해 주세요.",
+  "aiNote": "새 그림은 {provider}이 그려요. 동작을 바꿀 때는 기존 그림을 쓸 수 있어요.",
+  "aiMissing": "새 그림을 그리려면 서버에서 {provider}을 설정해 주세요.",
   "libraryNote": "무료 그림은 Kenney(CC0) 작품이에요. 이 모드에서 올린 그림은 이 서버에 보관돼요.",
   "artHelp": "고른 그림은 다음에 보낼 문장과 함께 쓰여요.",
   "assetExample": "그림을 고른 뒤 “{assets}”를 보내 보세요.",
@@ -55,7 +55,7 @@
   "illustration": "한 페이지 그림",
   "upload": "그림 올리기",
   "fileRules": "정지 PNG, JPEG, WebP 파일, 최대 8 MB.",
-  "consent": "선택한 내 그림을 참고 이미지로 Seedream에 보내도록 허용",
+  "consent": "선택한 내 그림을 참고 이미지로 {provider}에 보내도록 허용",
   "myArt": "내 그림",
   "maxAssets": "한 번에 그림을 16개까지 고를 수 있어요.",
   "saving": "그림을 저장하는 중이에요…",
@@ -92,5 +92,8 @@
   "taps": "마우스 및 터치 기록",
   "versions": "세계 버전",
   "timeline": "이벤트 타임라인",
-  "retention": "기록 보관 정책"
+  "retention": "기록 보관 정책",
+  "quota": "이 앱의 OpenAI 크레딧을 모두 사용했어요. 관리자에게 잔액 확인을 부탁해 주세요.",
+  "providerAccess": "선택한 OpenAI 모델을 사용할 수 없어요. 관리자에게 설정 확인을 부탁해 주세요.",
+  "refused": "다른 장면을 떠올려 이야기해 주세요."
 }

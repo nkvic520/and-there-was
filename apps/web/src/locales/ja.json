@@ -35,11 +35,11 @@
   "done": "完了",
   "artDone": "素材選びを終える",
   "aiArt": "AIで描く",
-  "aiDetail": "Seedreamでキャラクターや風景を描く。",
+  "aiDetail": "{provider}でキャラクターや風景を描く。",
   "library": "素材・自分の絵",
   "libraryDetail": "無料素材を選ぶか、自分の絵を追加。",
-  "aiNote": "Seedreamが新しい絵を描きます。動きの変更には以前の絵も使えます。",
-  "aiMissing": "新しい絵を描くには、サーバーでSeedreamを設定してください。",
+  "aiNote": "{provider}が新しい絵を描きます。動きの変更には以前の絵も使えます。",
+  "aiMissing": "新しい絵を描くには、サーバーで{provider}を設定してください。",
   "libraryNote": "無料素材はKenney（CC0）の作品です。このモードで追加した絵はこのサーバーに保存されます。",
   "artHelp": "選んだ絵は、次に送る文といっしょに使うよ。",
   "assetExample": "絵を選んでから「{assets}」と送ってね。",
@@ -55,7 +55,7 @@
   "illustration": "ページ全体の絵",
   "upload": "絵をアップロード",
   "fileRules": "静止画のPNG・JPEG・WebP、最大8 MB。",
-  "consent": "選んだ自分の絵を参考画像としてSeedreamに送ることを許可する",
+  "consent": "選んだ自分の絵を参考画像として{provider}に送ることを許可する",
   "myArt": "自分の絵",
   "maxAssets": "一度に選べる絵は16枚までです。",
   "saving": "絵を保存しているよ…",
@@ -92,5 +92,8 @@
   "taps": "クリックとタップの記録",
   "versions": "世界のバージョン",
   "timeline": "イベントの履歴",
-  "retention": "記録の保存期間"
+  "retention": "記録の保存期間",
+  "quota": "このアプリの OpenAI クレジットを使い切りました。管理する人に残高を確認してもらってね。",
+  "providerAccess": "選んだ OpenAI モデルを使えません。管理する人に設定を確認してもらってね。",
+  "refused": "別の場面を考えて、言葉にしてみよう。"
 }

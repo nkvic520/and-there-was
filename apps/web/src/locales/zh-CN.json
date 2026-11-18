@@ -35,11 +35,11 @@
   "done": "完成",
   "artDone": "完成素材选择",
   "aiArt": "AI 画图",
-  "aiDetail": "用 Seedream 画角色与场景。",
+  "aiDetail": "用 {provider} 画角色与场景。",
   "library": "素材／我的作品",
   "libraryDetail": "使用免费素材或上传图片。",
-  "aiNote": "新图片由 Seedream 生成，修改动作时可以复用已有图片。",
-  "aiMissing": "要画新图片，请先在服务端配置 Seedream。",
+  "aiNote": "新图片由 {provider} 生成，修改动作时可以复用已有图片。",
+  "aiMissing": "要画新图片，请先在服务端配置 {provider}。",
   "libraryNote": "免费素材来自 Kenney（CC0）。在此模式下，上传的作品保存在本服务器上。",
   "artHelp": "选中的图片会随下一句话加入世界。",
   "assetExample": "选好图片后，发送「{assets}」。",
@@ -55,7 +55,7 @@
   "illustration": "整页画作",
   "upload": "上传作品",
   "fileRules": "静态 PNG、JPEG 或 WebP，最大 8 MB。",
-  "consent": "允许把选中的上传作品发给 Seedream 作为参考图",
+  "consent": "允许把选中的上传作品发给 {provider} 作为参考图",
   "myArt": "我的作品",
   "maxAssets": "一次最多选择 16 张图片。",
   "saving": "正在保存作品…",
@@ -92,5 +92,8 @@
   "taps": "鼠标与触摸记录",
   "versions": "世界版本",
   "timeline": "事件时间线",
-  "retention": "档案保留策略"
+  "retention": "档案保留策略",
+  "quota": "这个应用的 OpenAI 额度已用完，请让管理应用的人查看余额。",
+  "providerAccess": "这个应用暂时无法使用所选的 OpenAI 模型，请让管理应用的人检查配置。",
+  "refused": "请换一个想法，描述一个不同的场景。"
 }

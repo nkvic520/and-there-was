@@ -19,9 +19,9 @@ The first meaningful sentence sets the language of a new story. For a name such 
 
 Choose a type when starting a world. Use **New world** to create a different kind of work. If your device prefers reduced motion, animation starts paused and can be resumed with the play button.
 
-## Free-form creation with DeepSeek
+## Free-form creation
 
-Set `GENERATOR_MODE=deepseek` and your own `DEEPSEEK_API_KEY` in `.env`, then restart. You can describe a scene and add requests to the same world, such as **Let there be light** followed by **After three touches, make a door appear**.
+Set `OPENAI_API_KEY` in the server’s `.env` and restart. Use a project key from the API organization holding your credits. The default `auto` mode selects OpenAI for both scenes and artwork. To use DeepSeek and optional Seedream instead, remove the OpenAI key and restart with the other keys configured. You can describe a scene and add requests to the same world, such as **Let there be light** followed by **After three touches, make a door appear**.
 
 The model can take some time and may fail. **Try again** retries a failed request; it sends another model request and may incur a charge. If an attempt fails, the last saved scene stays available.
 
@@ -33,7 +33,7 @@ Open the artwork selector below the input box. This choice is independent of the
 
 ### AI artwork
 
-Configure Seedream in addition to DeepSeek. New environments and characters can be drawn separately so the characters can move. Existing pictures can be reused for motion changes. An image character can move, scale, rotate and react to a click; a single image does not provide articulated limb animation.
+OpenAI provides both scene creation and artwork with one key. When using DeepSeek for scenes, configure Seedream for artwork. New environments and characters can be drawn separately so the characters can move. Existing pictures can be reused for motion changes. An image character can move, scale, rotate and react to a click; a single image does not provide articulated limb animation.
 
 ### Assets / my artwork
 
@@ -41,10 +41,12 @@ Select bundled images or upload a drawing. Give an upload a name and choose its 
 
 - Static PNG, JPEG and WebP files up to **8 MB** are supported. If a large photo is rejected, reduce its dimensions before uploading.
 - The original file is kept. The display copy is oriented correctly and resized when needed. Paper backgrounds are kept; uploading does not automatically cut out or repaint the drawing.
-- In AI artwork mode, the checkbox **Allow the selected uploaded drawings to be sent to Seedream as reference images** explicitly permits sending the selected uploads to Seedream as reference images for that submission. Selecting or uploading an image alone does not grant this permission.
-- Bundled [Kenney assets](../../fixtures/library/README.md) use CC0 and are not sent as image-model references. Existing Seedream images can be used as references for later edits.
+- The reference-image checkbox names the active provider (OpenAI or Seedream). Check it to allow the selected uploads to be sent to that provider for the next submission. Later submissions or a different provider need fresh permission.
+- Bundled [Kenney assets](../../fixtures/library/README.md) use CC0 and are not sent as image-model references. A provider can use its own generated images as references for later edits. Other saved images can still be placed directly.
 
-Uploading and using free assets does not call Seedream. When `GENERATOR_MODE=deepseek`, composing a scene still uses DeepSeek.
+Placing a free asset or uploaded drawing uses the saved image. In real-model mode, writing the scene still uses the text model. If a provider runs out of credits, the current work stays playable. The owner can check credit balance, project access and model availability. Requests stay with the selected provider until the owner changes the configuration.
+
+For OpenAI requests, the app stores the world locally and requests `store:false` for scene generation. Before processing personal data of children under 13 or the applicable age of digital consent via OpenAI, enable approved Zero Data Retention for the API organization or project and use eligible models. These provider controls are separate from this app’s three-month archive policy. [OpenAI under-18 guidance](https://developers.openai.com/api/docs/guides/safety-checks/under-18-api-guidance) · [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data)
 
 ## Install and configure
 
@@ -77,7 +79,10 @@ Open [http://127.0.0.1:3000](http://127.0.0.1:3000). Node startup reads the root
 | `PORT` | `3000` | Node HTTP port. |
 | `DATA_DIR` | `./data` | Persistent works and records. |
 | `PUBLIC_ORIGIN` | Unset | Exact public origin, such as `https://example.com`, if an authenticated reverse proxy rewrites the Host header. |
-| `GENERATOR_MODE` | `fixture` | Use `deepseek` for real model generation. |
+| `GENERATOR_MODE` | `auto` | Prefer OpenAI when its key is present, otherwise use configured DeepSeek or the bundled examples. Explicit `fixture` uses only examples. The legacy `deepseek` setting also prefers an OpenAI key. |
+| `OPENAI_API_KEY` | Empty | Project key for both OpenAI services. Subscription API credits apply to the linked organization. |
+| `OPENAI_TEXT_MODEL` | `gpt-6.2-sol` | Scene and interaction model supporting structured Responses. |
+| `OPENAI_IMAGE_MODEL` | `gpt-image-2.5-sunburst` | Model for new artwork and reference-image edits. |
 | `DEEPSEEK_API_KEY` | Empty | Your server-side API key. |
 | `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` | DeepSeek service address. |
 | `DEEPSEEK_MODEL` | `deepseek-flash` | Model to use. |
@@ -111,7 +116,7 @@ The owner can open `/inspect/<worldId>` to view saved inputs, generated content 
 
 **Why did my world disappear?** Reopen its full `/w/<worldId>` address and check that the service is using the original data directory or volume. The home page always creates a new world.
 
-**Why doesn’t my sentence work?** In `fixture` mode, only the sample phrases listed above are supported. For free-form requests, configure DeepSeek and restart.
+**Why doesn’t my sentence work?** In `fixture` mode, only the sample phrases listed above are supported. For free-form requests, configure OpenAI or DeepSeek and restart.
 
 **Why can’t the phone connect?** Use the computer’s LAN address, make sure both devices can reach that network, and allow the app’s port through the computer’s firewall.
 

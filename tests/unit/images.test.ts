@@ -118,7 +118,7 @@ it('rejects image requests in library mode and more than two generated images be
   await expect(s.images.resolve([request,request,request],[],{artSource:'seedream'},world.worldId,'test',new AbortController().signal)).rejects.toThrow(/最多/);expect(calls).toBe(0);
 });
 it('keeps the last valid scene when image generation fails and records a diagnostic',async()=>{
-  let calls=0;const s=await setup({generator:model(()=>imageReply('animated',[],[{...request,id:'new_'+calls}])),imageGenerator:{id:'test/images',configured:true,generate:async(_r,_refs,_s,archive)=>{archive.response({error:'broken image'});if(calls++)throw new Error('image failed');return png;}}}),world=s.store.createWorld('animated');
+  let calls=0;const s=await setup({generator:model(()=>imageReply('animated',[],[{...request,id:'new_'+calls}])),imageGenerator:{id:'test/images',provider:'seedream',configured:true,generate:async(_r,_refs,_s,archive)=>{archive.response({error:'broken image'});if(calls++)throw new Error('image failed');return png;}}}),world=s.store.createWorld('animated');
   const first=s.service.submit(world.worldId,randomUUID(),'first',{artSource:'seedream'}),saved=await commit(s,s.service.candidate((await waitFor(s,first.id,'trial')).attempt_id!));
   const next=s.service.submit(world.worldId,randomUUID(),'second',{artSource:'seedream'});await waitFor(s,next.id,'failed');
   expect(s.store.world(world.worldId)).toEqual(saved);expect(s.service.records(world.worldId).attempts.at(-1)?.error).toContain('image failed');
@@ -147,7 +147,59 @@ it('redacts provider failures, rejects missing configuration and cancels pending
   const call=pending.generate(request,[],controller.signal,archive);controller.abort();await expect(call).rejects.toThrow(/中断/);
 });
 it('times out the entire image pipeline without creating a partial version',async()=>{
-  const slow:ImageGenerator={id:'test/slow',configured:true,generate:async(_r,_refs,signal)=>new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>reject(new Error('cancelled')),{once:true}))};
+  const slow:ImageGenerator={id:'test/slow',provider:'seedream',configured:true,generate:async(_r,_refs,signal)=>new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>reject(new Error('cancelled')),{once:true}))};
   const s=await setup({generator:model(()=>imageReply('animated',[],[request])),imageGenerator:slow,generationTimeoutMs:40}),world=s.store.createWorld('animated');
   const t=s.service.submit(world.worldId,randomUUID(),'wait',{artSource:'seedream'});await waitFor(s,t.id,'failed');expect(s.store.world(world.worldId)).toEqual(world);expect(s.service.records(world.worldId).attempts[0].error).toContain('超时');
+});
+
+it('binds uploaded references to the named provider and preserves legacy Seedream consent',async()=>{
+  let count=0;
+  const imageGenerator:ImageGenerator={id:'openai/test-image',provider:'openai',configured:true,generate:async()=>{count++;return png;}};
+  const s=await setup({imageGenerator}),world=s.store.createWorld('animated');
+  const a=await s.images.add(png,{name:'Synthetic test',role:'character',source:'upload',credit:'fixture'},world.worldId);
+  const selected={assetIds:[a.imageId],allowUploadReferences:true};
+  const generate=(selection:ArtSelection)=>s.images.resolve([{...request,references:[a.id]}],[a],selection,world.worldId,'example',new AbortController().signal);
+  for(const selection of [{...selected,artSource:'seedream' as const},{...selected,artSource:'ai' as const,referenceProvider:'seedream' as const},{...selected,artSource:'ai' as const}]) {
+    await expect(generate(selection)).rejects.toThrow(/未获准/);
+  }
+  expect(count).toBe(0);
+  const [saved]=await generate({...selected,artSource:'ai',referenceProvider:'openai'});
+  expect(saved).toMatchObject({source:'openai',credit:'openai/test-image'});
+  expect(s.service.records(world.worldId).imageJobs[0]).toMatchObject({generator_id:'openai/test-image'});
+  const legacy={...a,source:'seedream' as const};
+  await expect(s.images.resolve([{...request,references:[legacy.id]}],[legacy],{artSource:'ai'},world.worldId,'example',new AbortController().signal)).rejects.toThrow(/未获准/);
+  expect(count).toBe(1);
+});
+
+it('reuses a paid first image when the second fails, and applies real-record retention to an OpenAI world',async()=>{
+  let plans=0;
+  const calls:string[]=[];
+  const bg:AssetRequest={...request,id:'forest',role:'background',name:'Forest'};
+  const actor:AssetRequest={...request,id:'fox'};
+  const planner=model(()=>{plans++;return imageReply('animated',['forest','fox'],plans===1?[bg,actor]:[actor]);});
+  const generator={id:'openai/test-scene',generate:planner.generate.bind(planner)};
+  const s=await setup({generator,imageGenerator:{id:'openai/test-image',provider:'openai',configured:true,generate:async r=>{
+    calls.push(r.id);if(calls.length===2)throw new Error('temporary failure');return png;
+  }}});
+  const world=s.store.createWorld('animated');
+  const t=s.service.submit(world.worldId,randomUUID(),'森林',{artSource:'ai'});
+  await waitFor(s,t.id,'failed');expect(s.store.world(world.worldId)).toEqual(world);
+  s.service.retry(t.id);const c=s.service.candidate((await waitFor(s,t.id,'trial')).attempt_id!);const saved=await commit(s,c);
+  expect(calls).toEqual(['forest','fox','fox']);expect(c.package.assets.map(a=>a.id)).toEqual(['forest','fox']);
+  s.store.prune(addCalendarMonths(new Date(),4));const records=s.service.records(world.worldId);
+  expect(records.turns).toEqual([]);expect(records.imageJobs).toEqual([]);expect(records.snapshot).toEqual(saved);
+  expect(s.store.json(saved.packageHash!)).toEqual(c.package);
+});
+
+it('expires a fixture submission retried on a real provider after restarting the instance', async()=>{
+  const first=await setup(), directory=first.store.directory, world=first.store.createWorld('animated');
+  const t=first.service.submit(world.worldId,randomUUID(),'自由创作',{artSource:'library'});
+  await waitFor(first,t.id,'failed');expect(first.store.turn(t.id).expires_at).toBeNull();
+  await first.app.close();instances=instances.filter(s=>s!==first);
+  const planner=model(()=>imageReply());
+  const next=await setup({dataDir:directory,generator:{id:'openai/test',generate:planner.generate.bind(planner)}});
+  next.service.retry(t.id);await commit(next,next.service.candidate((await waitFor(next,t.id,'trial')).attempt_id!));
+  expect(next.store.turn(t.id).expires_at).toBe(addCalendarMonths(new Date(t.created_at),3).toISOString());
+  next.store.prune(addCalendarMonths(new Date(),4));
+  expect(next.service.records(world.worldId).turns).toHaveLength(0);
 });

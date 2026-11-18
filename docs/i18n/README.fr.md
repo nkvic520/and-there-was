@@ -7,9 +7,9 @@ Une idée devient un petit monde. Un canevas pour les enfants et les adultes qui
 ## Ce que vous pouvez faire
 
 - Partez d’un canevas vide et faites apparaître une balle avec une phrase.
-- Décrivez et modifiez un monde avec DeepSeek, puis ajoutez des interactions par clic ou toucher.
+- Décrivez et modifiez un monde avec OpenAI ou DeepSeek, puis ajoutez des interactions par clic ou toucher.
 - Choisissez un monde animé ou une page fixe de bande dessinée ou de livre illustré.
-- Créez des images avec Seedream, choisissez des ressources gratuites ou importez un dessin de votre enfant.
+- Créez des images avec OpenAI ou Seedream, choisissez des ressources gratuites ou importez un dessin de votre enfant.
 - Continuez sur le même canevas et retrouvez votre création grâce à son lien enregistré.
 
 L’interface propose dix langues. Elle suit les préférences du navigateur et utilise l’anglais si aucune ne correspond. Cet appareil mémorise votre choix dans le menu des langues. Chaque monde conserve la langue de son histoire.
@@ -57,15 +57,16 @@ Définissez les valeurs dans `.env`, puis redémarrez le service après toute mo
 | `HOST` | Adresse d’écoute ; valeur par défaut : `127.0.0.1`. |
 | `PORT` | Port HTTP ; valeur par défaut : `3000`. |
 | `DATA_DIR` | Dossier des créations et des archives ; valeur par défaut : `./data`. |
-| `GENERATOR_MODE` | `fixture` pour l’exemple intégré ; `deepseek` pour la création libre. |
+| `GENERATOR_MODE` | Sélection automatique par défaut. Utilisez `fixture` pour les exemples locaux. |
+| `OPENAI_API_KEY / OPENAI_TEXT_MODEL / OPENAI_IMAGE_MODEL` | Clé du projet et modèles de scène et d’image. |
 | `DEEPSEEK_API_KEY / DEEPSEEK_MODEL / DEEPSEEK_BASE_URL` | Clé d’API, modèle et adresse de DeepSeek. |
 | `SEEDREAM_API_KEY / SEEDREAM_MODEL / SEEDREAM_BASE_URL / SEEDREAM_SIZE` | Clé d’API, modèle, adresse et taille d’image de Seedream. |
 
 ### Services d’IA
 
-Activez DeepSeek avec `GENERATOR_MODE=deepseek` et `DEEPSEEK_API_KEY`. Les autres paramètres de connexion figurent dans `.env.example`.
+Renseignez la clé `OPENAI_API_KEY` de votre organisation API et redémarrez. OpenAI crée alors les scènes et les illustrations, même si les clés DeepSeek et Seedream sont présentes.
 
-DeepSeek organise la scène et les interactions. Seedream dessine les images générées par IA. Les ressources gratuites et les imports ne font pas appel au modèle d’images ; la création de scènes en mode DeepSeek utilise toujours le modèle de texte.
+Si vous retirez la clé OpenAI et redémarrez, `DEEPSEEK_API_KEY` permet de créer des scènes et `SEEDREAM_API_KEY` active les illustrations par IA. Les ressources gratuites et les dessins importés peuvent être placés directement.
 
 Les requêtes réelles aux modèles peuvent être facturées par leurs fournisseurs. Une création enregistrée peut être rouverte sans être générée à nouveau.
 
