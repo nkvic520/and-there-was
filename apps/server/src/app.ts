@@ -2,7 +2,7 @@ import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { record, type TrialResult, type InteractionReceipt } from '@and-there-was/scene';
+import { record, type TrialResult, type InteractionReceipt, type WorldMode, type MotionCues } from '@and-there-was/scene';
 import { Store, HttpError } from './store';
 import { WorldService } from './service';
 import type { Generator } from './generator';
@@ -27,8 +27,14 @@ export async function createApp(options: { dataDir: string; generator?: Generato
     const status = record(error) && typeof error.statusCode === 'number' ? error.statusCode : 500;
     reply.code(status).send({ error: error instanceof Error ? error.message : 'Internal error' });
   });
-  app.get('/api/health', async () => ({ status: 'ok', mode: service.generatorId.startsWith('deepseek/') ? 'deepseek' : 'fixture', generator: service.generatorId, version: '0.2.0', archiveRetentionMonths: store.retentionMonths }));
-  app.post('/api/worlds', async (_request, reply) => reply.code(201).send(store.createWorld()));
+  app.get('/api/health', async () => ({ status: 'ok', mode: service.generatorId.startsWith('deepseek/') ? 'deepseek' : 'fixture', generator: service.generatorId, version: '0.3.0', archiveRetentionMonths: store.retentionMonths }));
+  app.post<{ Body: { mode?: WorldMode } }>('/api/worlds', {
+    schema: { body: { type: 'object', additionalProperties: false, properties: { mode: { type: 'string', enum: ['animated','storybook'] } } } }
+  }, async (request, reply) => reply.code(201).send(store.createWorld(request.body?.mode)));
+  app.get<{ Params: { id: string } }>('/api/worlds/:id/playback', async request => store.playback(request.params.id));
+  app.post<{ Params: { id: string }; Body: { versionId: string; elapsedMs: number; paused: boolean; cues?:MotionCues } }>('/api/worlds/:id/playback', {
+    schema: { body: { type: 'object', additionalProperties: false, required: ['versionId','elapsedMs','paused'], properties: { versionId: { type:'string' }, elapsedMs: { type:'number',minimum:0,maximum:315360000000 }, paused: { type:'boolean' }, cues:{type:'object',maxProperties:64,additionalProperties:{type:'object',additionalProperties:false,required:['key','startMs'],properties:{key:{type:'string',maxLength:80},startMs:{type:'number',minimum:0,maximum:315360000000}}}} } } }
+  }, async request => store.savePlayback(request.params.id, request.body.versionId, request.body.elapsedMs, request.body.paused,request.body.cues));
   app.get<{ Params: { id: string } }>('/api/worlds/:id', async request => store.world(request.params.id));
   app.get<{ Params: { id: string } }>('/api/worlds/:id/records', async request => service.records(request.params.id));
   app.get<{ Params: { id: string } }>('/api/worlds/:id/activity', async request => {

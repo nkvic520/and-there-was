@@ -10,6 +10,13 @@ The address becomes `/w/<worldId>`. Save or bookmark the **whole address** to re
 
 The app interface is currently in Simplified Chinese. The bundled sample recognizes exact Chinese phrases, so copy the examples as shown.
 
+## Choose a world type
+
+- **动态动画 — Animated:** a world with ongoing movement and click or touch interactions. Use **暂停动画** to pause and **播放动画** to resume.
+- **静态漫画／绘本 — Comic / picture book:** a still illustration or comic page with text.
+
+Choose a type when starting a world. Use **新世界** to create a different kind of work. If your device prefers reduced motion, animation starts paused and can be resumed with the play button.
+
 ## Free-form creation with DeepSeek
 
 Set `GENERATOR_MODE=deepseek` and your own `DEEPSEEK_API_KEY` in `.env`, then restart. You can describe a scene and add requests to the same world, such as **要有光** (“Let there be light”) followed by **碰三次出现一扇门** (“After three touches, make a door appear”).
@@ -67,7 +74,7 @@ The app has no built-in accounts and is intended for a private, single-owner ins
 
 For Node deployments, keep the entire directory selected by `DATA_DIR`. For Compose, keep the `world-data` volume. Stop the service before taking a complete copy, and restore that whole copy to the same data location. Removing the directory or volume removes the saved works.
 
-After an update or restart, reopen the complete world link rather than the home page. Reopening a saved world does not call the model again.
+After an update or restart, reopen the complete world link rather than the home page. Saved game state and saved animation progress are restored. A sudden exit may lose animation time that had not yet been saved. Reopening a saved world does not call the model again.
 
 Real records are kept for **three calendar months per record**. The current work and the files it needs remain available. Expired inputs, model requests and responses, and unneeded history are cleaned up automatically. Bundled samples are retained. Copies in your own backups and provider-side records follow their own retention rules.
 
@@ -82,3 +89,5 @@ The owner can open `/inspect/<worldId>` to view saved inputs, generated content 
 **Why can’t the phone connect?** Use the computer’s LAN address, make sure both devices can reach that network, and allow the app’s port through the computer’s firewall.
 
 **Why is generation failing?** Check the configured provider, model access and account balance. After updating keys or model settings, restart the service. The `/api/health` page shows the active model, without displaying the keys. A failed scene can be retried while keeping the last saved work.
+
+**Why is the picture still?** A picture-book world is intentionally still. In an animated world, check the play/pause control and the device’s reduced-motion setting.

@@ -8,6 +8,7 @@ Una idea se convierte en un pequeño mundo. Un lienzo para niños y para los adu
 
 - Empieza con un lienzo vacío y haz aparecer una pelota con una frase.
 - Describe y modifica un mundo con DeepSeek, y añade interacciones con clics o toques.
+- Elige un mundo animado o una página estática de cómic o cuento ilustrado.
 - Sigue creando en el mismo lienzo y vuelve a tu obra mediante su enlace guardado.
 
 La interfaz de la aplicación está actualmente en chino simplificado.

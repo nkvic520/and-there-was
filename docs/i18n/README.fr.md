@@ -8,6 +8,7 @@ Une idée devient un petit monde. Un canevas pour les enfants et les adultes qui
 
 - Partez d’un canevas vide et faites apparaître une balle avec une phrase.
 - Décrivez et modifiez un monde avec DeepSeek, puis ajoutez des interactions par clic ou toucher.
+- Choisissez un monde animé ou une page fixe de bande dessinée ou de livre illustré.
 - Continuez sur le même canevas et retrouvez votre création grâce à son lien enregistré.
 
 L’interface de l’application est actuellement en chinois simplifié.

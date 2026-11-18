@@ -8,6 +8,7 @@ A thought becomes a little world. A canvas for children and the grown-ups creati
 
 - Start with an empty canvas and bring a ball into the scene with a sentence.
 - Describe a world, change it with DeepSeek, and add click or touch interactions.
+- Choose a lively animated world or a still comic / picture-book page.
 - Keep the same canvas and return to your work using its saved link.
 
 The app interface is currently in Simplified Chinese.

@@ -8,6 +8,7 @@ Uma ideia vira um pequeno mundo. Uma tela para crianças e para os adultos que c
 
 - Comece com uma tela vazia e faça uma bola aparecer com uma frase.
 - Descreva e modifique um mundo com o DeepSeek e adicione interações por clique ou toque.
+- Escolha um mundo animado ou uma página estática de quadrinhos ou livro ilustrado.
 - Continue criando na mesma tela e volte à sua obra pelo link salvo.
 
 A interface do aplicativo está atualmente em chinês simplificado.

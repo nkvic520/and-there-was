@@ -8,6 +8,7 @@ Aus einem Gedanken wird eine kleine Welt. Eine Leinwand für Kinder und die Erwa
 
 - Beginne mit einer leeren Leinwand und lass mit einem Satz einen Ball erscheinen.
 - Beschreibe und verändere mit DeepSeek eine Welt und füge Interaktionen per Klick oder Berührung hinzu.
+- Wähle eine animierte Welt oder eine unbewegte Comic- oder Bilderbuchseite.
 - Gestalte auf derselben Leinwand weiter und kehre über den gespeicherten Link zu deinem Werk zurück.
 
 Die Benutzeroberfläche ist derzeit auf vereinfachtem Chinesisch verfügbar.

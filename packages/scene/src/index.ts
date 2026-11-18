@@ -1,16 +1,22 @@
 import Ajv from 'ajv';
 import { sha256 as digest256 } from '@noble/hashes/sha2.js';
+import type { Motion, WorldMode } from './motion';
+export { sampleMotion, restingPose, type Motion, type MotionFrame, type Pose, type WorldMode, type MotionCues } from './motion';
 
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type SceneState = { [key: string]: Json };
-export interface SceneProtocol { schemaVersion: 1 | 2; stateSchema: Record<string, Json>; events: Record<string, Json> }
+export interface SceneProtocol { schemaVersion: 1 | 2 | 3; mode?: WorldMode; stateSchema: Record<string, Json>; events: Record<string, Json> }
 export interface ScenePackage {
-  formatVersion: 1; sdkVersion: 1 | 2; entry: 'scene.js';
+  formatVersion: 1; sdkVersion: 1 | 2 | 3; entry: 'scene.js';
   files: Record<string, string>; hashes: Record<string, string>; assets: [];
 }
 export interface DrawOperation {
-  kind: 'circle' | 'ellipse' | 'rect'; id: string; x: number; y: number;
+  kind: 'circle' | 'ellipse' | 'rect' | 'path' | 'text' | 'group'; id: string; x: number; y: number;
   radiusX: number; radiusY: number; color: string; alpha: number;
+  parent?: string; rotation?: number; stroke?: string; strokeWidth?: number; roundness?: number;
+  gradient?: { type: 'linear' | 'radial'; from: string; to: string }; shadow?: boolean;
+  path?: (string | number)[][]; text?: string; fontSize?: number; align?: 'left' | 'center' | 'right';
+  motions?: Motion[]; motionKey?: string; enter?: 'fade' | 'pop' | 'drop';
 }
 export interface EventBinding { targetId: string; event: string; payload: SceneState }
 export interface SceneEvent { name: string; payload: SceneState }
@@ -23,6 +29,7 @@ export interface TrialResult {
 export interface WorldSnapshot {
   worldId: string; versionId: string; parentVersionId: string | null; revision: number;
   packageHash: string | null; state: SceneState; operations: DrawOperation[]; bindings?: EventBinding[]; createdAt: string;
+  mode?: WorldMode;
 }
 export interface InteractionReceipt { clientEventId: string; versionId: string; revision: number; targetId: string; output?: TrialOutput; error?: string }
 export interface Candidate {
@@ -77,7 +84,9 @@ function checkSchema(schema: unknown, depth = 0, budget = { nodes: 0 }): void {
 }
 const ajv = new Ajv({ strict: true, allErrors: false, validateFormats: false, addUsedSchema: false });
 export function validateProtocol(value: unknown): asserts value is SceneProtocol {
-  assert(record(value) && (value.schemaVersion === 1 || value.schemaVersion === 2) && record(value.events) && Object.keys(value.events).length <= 32, 'Unsupported protocol/events');
+  assert(record(value) && [1, 2, 3].includes(value.schemaVersion as number) && record(value.events) && Object.keys(value.events).length <= 32, 'Unsupported protocol/events');
+  if (value.schemaVersion === 3) assert(['animated', 'storybook'].includes(String(value.mode)), 'World mode required');
+  if (value.mode === 'storybook') assert(Object.keys(value.events).length === 0, 'Storybook protocol must have no events');
   if (value.schemaVersion === 1) assert(Object.keys(value.events).length === 0, 'SDK 1 does not support events');
   assert(utf8Size(JSON.stringify(value)) <= 32768, 'Protocol too large');
   checkSchema(value.stateSchema);
@@ -102,25 +111,89 @@ export function validateState(protocol: SceneProtocol, value: unknown): asserts 
   try { assert(validate(value), `Invalid scene state: ${ajv.errorsText(validate.errors)}`); }
   finally { ajv.removeSchema(protocol.stateSchema); }
 }
-export function validateOperations(value: unknown): asserts value is DrawOperation[] {
-  assert(Array.isArray(value) && value.length <= LIMITS.operations, 'Operation limit exceeded');
+export function validateOperations(value: unknown, sdk = 1): asserts value is DrawOperation[] {
+  assert(Array.isArray(value) && value.length <= (sdk === 3 ? 256 : LIMITS.operations), 'Operation limit exceeded');
   const ids = new Set<string>();
   for (const op of value) {
-    assert(record(op) && ['circle', 'ellipse', 'rect'].includes(String(op.kind)), 'Unsupported operation');
+    assert(record(op) && (sdk === 3 ? ['circle', 'ellipse', 'rect', 'path', 'text', 'group'] : ['circle', 'ellipse', 'rect']).includes(String(op.kind)), 'Unsupported operation');
     assert(typeof op.id === 'string' && /^[\w-]{1,80}$/.test(op.id) && !ids.has(op.id), 'Invalid/duplicate drawing id');
     ids.add(op.id);
-    for (const field of ['x', 'y', 'radiusX', 'radiusY', 'alpha']) assert(typeof op[field] === 'number' && Number.isFinite(op[field]) && op[field] >= 0 && op[field] <= 1, `Invalid ${field}`);
-    assert(Number(op.radiusX) > 0 && Number(op.radiusY) > 0 && (op.kind !== 'circle' || op.radiusX === op.radiusY), 'Invalid radius');
+    for (const field of ['x', 'y', 'radiusX', 'radiusY', 'alpha']) assert(typeof op[field] === 'number' && Number.isFinite(op[field]) && op[field] >= (sdk === 3 && ['x', 'y'].includes(field) ? -2 : 0) && op[field] <= (sdk === 3 && field !== 'alpha' ? 2 : 1), `Invalid ${field}`);
+    assert(Number(op.radiusX) > 0 && Number(op.radiusY) > 0 && (op.kind !== 'circle' || op.radiusX === op.radiusY), `Invalid radius on ${op.id}: use equal circle dimensions, or ellipse`);
     assert(typeof op.color === 'string' && /^#[0-9a-f]{6}$/i.test(op.color), 'Invalid color');
-    assert(Object.keys(op).length === 8, 'Unexpected drawing fields');
+    if (sdk < 3) assert(Object.keys(op).length === 8, 'Unexpected drawing fields');
+    else validateVisualFields(op);
+  }
+  if (sdk === 3) {
+    const byId = new Map((value as DrawOperation[]).map(op => [op.id, op]));
+    const labels = (value as DrawOperation[]).filter(op => op.kind === 'text');
+    assert(labels.length <= 24 && labels.reduce((n,op) => n+(op.text?.length ?? 0),0) <= 2400, 'Text budget exceeded');
+    let textArea = 0;
+    for (const op of labels) {
+      const font = (op.fontSize ?? .035)*1000, width = op.radiusX*2000;
+      const lines = op.text!.split('\n').reduce((n,line) => n+Math.max(1,Math.ceil(line.length/Math.max(1,Math.floor(width/font)))),0);
+      assert(lines <= 12, 'Text wraps to too many lines');
+      textArea += Math.min(width,op.text!.length*font)*lines*font*1.45;
+    }
+    assert(textArea <= 8_000_000, 'Text texture budget exceeded');
+    assert((value as DrawOperation[]).reduce((n,op) => n+(op.path?.length ?? 0),0) <= 1024, 'Path budget exceeded');
+    assert((value as DrawOperation[]).filter(op => op.motions?.length).length <= 64, 'Too many animated nodes');
+    for (const op of value as DrawOperation[]) {
+      let parent = op.parent, depth = 0;
+      const ancestors = new Set([op.id]);
+      while (parent) {
+        const group = byId.get(parent);
+        assert(group?.kind === 'group' && !ancestors.has(parent) && ++depth <= 8, 'Invalid group hierarchy');
+        ancestors.add(parent); parent = group.parent;
+      }
+    }
+  }
+}
+function validateVisualFields(op: Record<string, unknown>) {
+  const allowed = new Set(['kind','id','x','y','radiusX','radiusY','color','alpha','parent','rotation','stroke','strokeWidth','roundness','gradient','shadow','path','text','fontSize','align','motions','motionKey','enter']);
+  for (const key of Object.keys(op)) assert(allowed.has(key), `Unexpected drawing field: ${key}`);
+  const finite = (n: unknown, min: number, max: number) => typeof n === 'number' && Number.isFinite(n) && n >= min && n <= max;
+  const color = (c: unknown) => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c);
+  if (op.parent !== undefined) assert(typeof op.parent === 'string' && /^[\w-]{1,80}$/.test(op.parent), 'Invalid parent');
+  for (const [key, min, max] of [['rotation', -20, 20], ['strokeWidth', 0, .05], ['roundness', 0, .5], ['fontSize', .012, .15]] as const) if (op[key] !== undefined) assert(finite(op[key], min, max), `Invalid ${key}`);
+  if (op.stroke !== undefined) assert(color(op.stroke), 'Invalid stroke');
+  if (op.shadow !== undefined) assert(typeof op.shadow === 'boolean', 'Invalid shadow');
+  if (op.gradient !== undefined) assert(record(op.gradient) && Object.keys(op.gradient).length === 3 && ['linear','radial'].includes(String(op.gradient.type)) && color(op.gradient.from) && color(op.gradient.to), 'Invalid gradient');
+  if (op.enter !== undefined) assert(['fade','pop','drop'].includes(String(op.enter)), 'Invalid entrance');
+  if (op.motionKey !== undefined) assert(typeof op.motionKey === 'string' && op.motionKey.length <= 80 && Array.isArray(op.motions) && op.motions.length > 0, 'Invalid motion key');
+  if (op.kind === 'text') assert(typeof op.text === 'string' && op.text.length <= 240 && finite(op.fontSize ?? .035, .012, .15), 'Invalid text');
+  else assert(op.text === undefined && op.fontSize === undefined && op.align === undefined, 'Text fields on non-text node');
+  if (op.align !== undefined) assert(['left','center','right'].includes(String(op.align)), 'Invalid text alignment');
+  if (op.kind === 'path') {
+    assert(Array.isArray(op.path) && op.path.length > 1 && op.path.length <= 64, 'Invalid path');
+    assert(op.path[0]?.[0] === 'M', 'Path must start with M');
+    for (const c of op.path) assert(Array.isArray(c) && ({ M:3,L:3,Q:5,C:7,Z:1 } as Record<string,number>)[String(c[0])] === c.length && c.slice(1).every(n => finite(n, -2, 2)), 'Invalid path command');
+  } else assert(op.path === undefined, 'Path commands on non-path node');
+  if (op.motions !== undefined) {
+    assert(Array.isArray(op.motions) && op.motions.length <= 3, 'Invalid motion tracks');
+    for (const m of op.motions) {
+      assert(record(m) && Object.keys(m).every(k => ['duration','loop','frames','easing','phase'].includes(k)), `Invalid motion fields on ${op.id}: motionKey belongs on the node, outside motions[]`);
+      assert(finite(m.duration, .2, 120) && ['repeat','pingpong','once'].includes(String(m.loop)), `Invalid motion on ${op.id}: duration must be .2..120 seconds, loop repeat/pingpong/once`);
+      assert(m.easing === undefined || ['linear','smooth'].includes(String(m.easing)), 'Invalid easing');
+      assert(m.phase === undefined || finite(m.phase, 0, 120), 'Invalid motion phase');
+      assert(Array.isArray(m.frames) && m.frames.length >= 2 && m.frames.length <= 16 && m.frames[0]?.at === 0 && m.frames.at(-1)?.at === 1, 'Motion frames must span 0..1');
+      let last = -1;
+      for (const f of m.frames) {
+        assert(record(f) && finite(f.at, 0, 1) && Number(f.at) > last, 'Invalid frame time'); last = Number(f.at);
+        for (const [k,v] of Object.entries(f)) {
+          const bounds: Record<string, [number,number]> = { at:[0,1],x:[-2,2],y:[-2,2],scaleX:[.05,3],scaleY:[.05,3],rotation:[-20,20],alpha:[0,1] };
+          assert(bounds[k] && finite(v, ...bounds[k]), 'Invalid motion property');
+        }
+      }
+    }
   }
 }
 export function validateOutput(protocol: SceneProtocol, output: unknown): asserts output is TrialOutput {
   assert(record(output) && output.runtimeVersion === runtimeVersion(protocol.schemaVersion), 'Runtime version mismatch');
   assert(typeof output.durationMs === 'number' && Number.isFinite(output.durationMs) && output.durationMs >= 0, 'Invalid duration');
   validateState(protocol, output.state);
-  validateOperations(output.operations);
-  if (protocol.schemaVersion === 2) {
+  validateOperations(output.operations, protocol.schemaVersion);
+  if (protocol.schemaVersion >= 2) {
     assert(Array.isArray(output.bindings) && output.bindings.length <= 1000, 'Invalid event bindings');
     const ids = new Set<string>();
     for (const binding of output.bindings) {
@@ -130,10 +203,11 @@ export function validateOutput(protocol: SceneProtocol, output: unknown): assert
       assert(output.operations.some(op => op.id === binding.targetId), `Binding target was not drawn in this mount: ${binding.targetId}`);
       ids.add(binding.targetId); validateEvent(protocol, { name: binding.event, payload: binding.payload as SceneState });
     }
+    if (protocol.mode === 'storybook') assert(output.bindings.length === 0 && output.operations.every(op => !op.motions?.length && op.enter === undefined), 'Storybook scenes must be static');
   } else assert(output.bindings === undefined && output.operations.every(op => op.kind !== 'rect'), 'SDK 1 capability mismatch');
 }
 export async function validatePackage(value: unknown): Promise<SceneProtocol> {
-  assert(record(value) && value.formatVersion === 1 && (value.sdkVersion === 1 || value.sdkVersion === 2) && value.entry === 'scene.js', 'Unsupported package or SDK');
+  assert(record(value) && value.formatVersion === 1 && [1,2,3].includes(value.sdkVersion as number) && value.entry === 'scene.js', 'Unsupported package or SDK');
   assert(record(value.files) && record(value.hashes) && Array.isArray(value.assets) && value.assets.length === 0, 'Invalid files/assets');
   assert(utf8Size(canonical(value)) <= LIMITS.packageBytes, 'Package too large');
   const names = ['protocol.json', 'scene.js', 'view.json'];
@@ -146,6 +220,12 @@ export async function validatePackage(value: unknown): Promise<SceneProtocol> {
   validateProtocol(protocol);
   assert(protocol.schemaVersion === value.sdkVersion, 'Protocol and SDK version mismatch');
   const view = JSON.parse(value.files['view.json'] as string);
-  assert(record(view) && view.coordinates === 'normalized' && typeof view.background === 'string' && /^#[0-9a-f]{6}$/i.test(view.background) && (value.sdkVersion === 2 || view.background === '#ffffff'), 'Unsupported view');
+  assert(record(view) && view.coordinates === 'normalized' && typeof view.background === 'string' && /^#[0-9a-f]{6}$/i.test(view.background) && (Number(value.sdkVersion) >= 2 || view.background === '#ffffff'), 'Unsupported view');
+  if (value.sdkVersion === 3) assert(view.mode === protocol.mode, 'View mode mismatch');
   return protocol;
+}
+export function validateWorldMode(protocol: SceneProtocol, mode?: WorldMode) {
+  if (mode) assert(protocol.schemaVersion === 3, 'World mode requires SDK 3');
+  if (protocol.schemaVersion === 3) assert(protocol.mode === (mode ?? 'animated'), 'Package does not match world mode');
+  else assert(mode !== 'storybook', 'Storybook world requires SDK 3');
 }

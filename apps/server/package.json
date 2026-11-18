@@ -1,10 +1,10 @@
 {
   "name": "@and-there-was/server",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "dependencies": {
-    "@and-there-was/scene": "0.2.0",
+    "@and-there-was/scene": "0.3.0",
     "@fastify/static": "10.1.11",
     "better-sqlite3": "12.11.1",
     "fastify": "5.12.8"
