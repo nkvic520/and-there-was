@@ -9,6 +9,6 @@ export function mount(sdk) {
   sdk.node({id:'shadow',kind:'ellipse',x:.5,y:.56,width:.22,height:.035,color:'#91b3a0',alpha:.25});
   sdk.node({id:b.id,kind:'circle',x:.5,y:.45,width:.21,color:b.color,gradient:{type:'radial',from:'#afdfff',to:b.color},stroke:'#376aab',strokeWidth:.003});
   sdk.node({id:'highlight',kind:'ellipse',x:.467,y:.412,width:.04,height:.026,color:'#ffffff',alpha:.75});
-  sdk.node({id:'title',kind:'text',x:.5,y:.115,width:.75,height:.08,text:'一个蓝色的小球',fontSize:.043,color:'#3c5260'});
-  sdk.node({id:'caption',kind:'text',x:.5,y:.81,width:.68,height:.12,text:'小球落在柔软的草地上，\n一个小小的故事，就有了。',fontSize:.029,color:'#6a776c'});
+  sdk.node({id:'title',kind:'text',x:.5,y:.115,width:.75,height:.08,text:story.title,fontSize:.043,color:'#3c5260'});
+  sdk.node({id:'caption',kind:'text',x:.5,y:.81,width:.68,height:.12,text:story.caption,fontSize:.029,color:'#6a776c'});
 }

@@ -4,8 +4,10 @@ import { resolve, join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { addCalendarMonths, canonical, record, type WorldSnapshot, type WorldMode, type MotionCues } from '@and-there-was/scene';
 
-export interface TurnRow { seq: number; id: string; world_id: string; client_id: string; text: string; status: string; attempt_id: string | null; created_at: string; art_selection:string }
-export interface AttemptRow { seq: number; id: string; turn_id: string; status: string; base_version: string; base_revision: number; package_hash: string | null; request_hash: string | null; response_hash: string | null; result_hash: string | null; committed_version: string | null; error: string | null; created_at: string; updated_at: string }
+import type { Locale } from '@and-there-was/scene/languages';
+
+export interface TurnRow { seq: number; id: string; world_id: string; client_id: string; text: string; status: string; attempt_id: string | null; created_at: string; art_selection:string; ui_locale:Locale }
+export interface AttemptRow { story_locale: Locale | null; seq: number; id: string; turn_id: string; status: string; base_version: string; base_revision: number; package_hash: string | null; request_hash: string | null; response_hash: string | null; result_hash: string | null; committed_version: string | null; error: string | null; created_at: string; updated_at: string }
 export class HttpError extends Error { constructor(public statusCode: number, message: string) { super(message); } }
 export const now = () => new Date().toISOString();
 export class Store {
@@ -47,9 +49,11 @@ export class Store {
     `);
     addColumn('playback', 'cues', "TEXT NOT NULL DEFAULT '{}'");
     addColumn('turns', 'art_selection', "TEXT NOT NULL DEFAULT '{}'");
+    addColumn('turns', 'ui_locale', "TEXT NOT NULL DEFAULT 'zh-CN'");
+    addColumn('attempts', 'story_locale', 'TEXT');
     this.db.exec(`CREATE TABLE IF NOT EXISTS images(id TEXT PRIMARY KEY,world_id TEXT,metadata TEXT NOT NULL,created_at TEXT NOT NULL,expires_at TEXT);
       CREATE TABLE IF NOT EXISTS image_jobs(id TEXT PRIMARY KEY,world_id TEXT NOT NULL,attempt_id TEXT NOT NULL,status TEXT NOT NULL,request_hash TEXT,response_hash TEXT,image_id TEXT,error TEXT,created_at TEXT NOT NULL,expires_at TEXT NOT NULL);
-      PRAGMA user_version=4;`);
+      PRAGMA user_version=5;`);
   }
   put(text: string | Uint8Array, mediaType = 'application/json'): string {
     const hash = createHash('sha256').update(text).digest('hex');

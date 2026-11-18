@@ -83,7 +83,7 @@ export class Presentation {
       node.body.addChild(sprite);return;
     }
     if (op.kind === 'text') {
-      const label = new Text({ text:op.text ?? '', resolution:1, style:{ fontFamily:'"Microsoft YaHei", "Segoe UI", sans-serif', fontSize:(op.fontSize ?? .035)*1000, fill:op.color, fontWeight:'500', wordWrap:true, wordWrapWidth:w, breakWords:true, align:op.align ?? 'center', lineHeight:(op.fontSize ?? .035)*1450 } });
+      const label = new Text({ text:op.text ?? '', resolution:1, style:{ fontFamily:'system-ui, "Microsoft YaHei", "Yu Gothic", "Malgun Gothic", sans-serif', fontSize:(op.fontSize ?? .035)*1000, fill:op.color, fontWeight:'500', wordWrap:true, wordWrapWidth:w, breakWords:true, align:op.align ?? 'center', lineHeight:(op.fontSize ?? .035)*1450 } });
       label.anchor.set(op.align === 'left' ? 0 : op.align === 'right' ? 1 : .5, .5);
       if (op.align === 'left') label.x = -w/2; else if (op.align === 'right') label.x = w/2;
       node.body.addChild(label); return;

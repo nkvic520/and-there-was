@@ -137,3 +137,30 @@ describe('durability, protocol and commit boundaries', () => {
     expect((await s.app.inject('/api/artifacts/not-a-hash')).statusCode).toBe(404);
   });
 });
+
+it('commits language with the version, and replays a submission using its original menu preference', async () => {
+  const s = await setup(), world = s.store.createWorld('storybook');
+  const url = '/api/worlds/' + world.worldId + '/turns';
+  const payload = {text:'  Il y a une balle  ',clientSubmissionId:randomUUID(),uiLocale:'de'};
+  expect((await s.app.inject({method:'POST',url,payload:{...payload,uiLocale:'de-invalid'}})).statusCode).toBe(400);
+  const first = (await s.app.inject({method:'POST',url,payload})).json();
+  const replay = (await s.app.inject({method:'POST',url,payload:{...payload,uiLocale:'ja'}})).json();
+  expect(replay).toMatchObject({id:first.id,ui_locale:'de',text:payload.text});
+  async function pending() {
+    return until(() => {
+      const turn = s.store.turn(first.id);
+      return turn.status === 'trial' ? s.service.candidate(turn.attempt_id!) : undefined;
+    });
+  }
+  const c = await pending();
+  expect(s.store.world(world.worldId).storyLocale).toBeUndefined();
+  const base = {attemptId:c.attemptId,packageHash:c.packageHash,baseRevision:c.baseRevision,baseVersionId:c.baseVersionId};
+  await s.service.trial({...base,ok:false,error:'Test interrupted trial'});
+  expect(s.store.world(world.worldId)).toEqual(world);
+  s.service.retry(first.id);
+  const retried = await pending();
+  const output = await executePackage(engine,retried.package,retried.baseline.state,{migrate:true});
+  const saved = await s.service.trial({...base,attemptId:retried.attemptId,packageHash:retried.packageHash,ok:true,output});
+  expect(saved).toMatchObject({storyLocale:'fr',revision:1});
+  expect(s.service.records(world.worldId).turns).toHaveLength(1);
+});

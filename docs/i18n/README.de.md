@@ -12,13 +12,13 @@ Aus einem Gedanken wird eine kleine Welt. Eine Leinwand für Kinder und die Erwa
 - Erzeuge Bilder mit Seedream, wähle kostenlose Vorlagen oder lade eine eigene Kinderzeichnung hoch.
 - Gestalte auf derselben Leinwand weiter und kehre über den gespeicherten Link zu deinem Werk zurück.
 
-Die Benutzeroberfläche ist derzeit auf vereinfachtem Chinesisch verfügbar.
+Die Oberfläche unterstützt zehn Sprachen. Beim ersten Besuch gelten die Spracheinstellungen des Browsers, ersatzweise Englisch. Das Gerät merkt sich deine Wahl im Sprachmenü. Jede Welt speichert ihre eigene Erzählsprache.
 
 ## Demo ausprobieren
 
-Es gibt noch keine öffentlich gehostete Demo. Starte die Anwendung lokal und sende **「有一个球」** („Da ist ein Ball“). Das integrierte Beispiel benötigt keine Modell-Zugangsdaten und erkennt genau diesen chinesischen Satz.
+Starte die App lokal und sende **Da ist ein Ball**, um sie ohne Modellschlüssel auszuprobieren. Ein öffentlicher Demo-Link folgt, sobald er verfügbar ist.
 
-Um Bilder ohne Modellschlüssel auszuprobieren, wähle unter **素材／我的作品** Bilder aus und sende **「使用选中的素材」** („Ausgewählte Vorlagen verwenden“).
+Wähle Bilder unter **Vorlagen / meine Bilder** und sende **Verwende die ausgewählten Bilder**.
 
 ![Integriertes Beispiel: ein Ball auf der Leinwand](../../docs/media/ball.png)
 

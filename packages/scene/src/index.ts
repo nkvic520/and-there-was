@@ -1,4 +1,5 @@
 import type { SceneAsset } from './assets';
+import type { Locale } from './languages';
 export type { SceneAsset, AssetRequest, ArtSelection, ArtSource, ImageRole } from './assets';
 import Ajv from 'ajv';
 import { sha256 as digest256 } from '@noble/hashes/sha2.js';
@@ -32,6 +33,7 @@ export interface WorldSnapshot {
   worldId: string; versionId: string; parentVersionId: string | null; revision: number;
   packageHash: string | null; state: SceneState; operations: DrawOperation[]; bindings?: EventBinding[]; createdAt: string;
   mode?: WorldMode;
+  storyLocale?: Locale;
 }
 export interface InteractionReceipt { clientEventId: string; versionId: string; revision: number; targetId: string; output?: TrialOutput; error?: string }
 export interface Candidate {

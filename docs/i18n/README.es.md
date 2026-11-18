@@ -12,13 +12,13 @@ Una idea se convierte en un pequeño mundo. Un lienzo para niños y para los adu
 - Crea imágenes con Seedream, elige recursos gratuitos o sube un dibujo del niño.
 - Sigue creando en el mismo lienzo y vuelve a tu obra mediante su enlace guardado.
 
-La interfaz de la aplicación está actualmente en chino simplificado.
+La interfaz ofrece diez idiomas. Sigue las preferencias del navegador y usa el inglés si no hay coincidencia. El dispositivo recuerda el idioma que elijas en el menú. Cada mundo guarda el idioma de su historia.
 
 ## Probar la demo
 
-Todavía no hay una demo pública alojada. Ejecuta la aplicación localmente y envía **「有一个球」** (“Hay una pelota”). El ejemplo integrado no necesita credenciales de modelos y reconoce esta frase exacta en chino.
+Ejecuta la aplicación localmente y envía **Hay una pelota** para probarla sin clave. El enlace a la demo pública se añadirá cuando esté disponible.
 
-Para probar imágenes sin una clave de modelo, elige imágenes en **素材／我的作品** y envía **「使用选中的素材」** (“Usar los recursos seleccionados”).
+Para probar imágenes, elígelas en **Imágenes / mis dibujos** y envía **Usa las imágenes seleccionadas**.
 
 ![Ejemplo integrado: una pelota en el lienzo](../../docs/media/ball.png)
 

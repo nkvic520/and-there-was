@@ -5,6 +5,7 @@ import { InteractionQueue, clientId } from './interactions';
 import { Presentation } from './presentation';
 import { Textures } from './textures';
 import { artPicker } from './art-picker';
+import { assetName, clearLabel, label, languagePicker, localize, translate, uiLocale, type Message } from './i18n';
 import './style.css';
 
 const root = document.querySelector<HTMLElement>('#app')!;
@@ -23,68 +24,86 @@ async function loadPackage(hash: string) { let pkg = packages.get(hash); if (!pk
 function showFatal(error: unknown) {
   root.replaceChildren();
   const message = document.createElement('p'); message.className = 'fatal';
-  message.textContent = `暂时没能打开这个世界。${error instanceof Error ? error.message : String(error)}`;
-  const retry = document.createElement('button'); retry.textContent = '重新打开'; retry.onclick = () => location.reload();
-  root.append(message, retry);
+  console.error(error);
+  label(message, 'fatal');
+  const retry = document.createElement('button'); label(retry, 'reopen'); retry.onclick = () => location.reload();
+  root.append(message, retry, languagePicker());
 }
 async function inspect(worldId: string) {
   root.className = 'inspector';
   const header = document.createElement('header'), title = document.createElement('h1'), back = document.createElement('a');
-  title.textContent = '世界档案'; back.textContent = '回到画布 ↗'; back.href = `/w/${worldId}`;
-  header.append(title, back); root.append(header);
-  const description = document.createElement('p'); description.textContent = '原文、生成产物与互动记录 · 真实会话保留 3 个月，当前作品及恢复所需文件继续保留。'; root.append(description);
+  label(title, 'archive'); label(back, 'backCanvas'); back.href = `/w/${worldId}`;
+  header.append(title, back, languagePicker()); root.append(header);
+  const description = document.createElement('p'); label(description, 'retentionNote'); root.append(description);
   const records = await api<{ snapshot: WorldSnapshot; turns: Record<string, unknown>[]; attempts: Record<string, unknown>[]; versions: WorldSnapshot[]; events: unknown[]; chunks?: unknown[]; interactions?: unknown[]; retention?: unknown; playback?: unknown; images?:SceneAsset[]; imageJobs?:Record<string,unknown>[] }>(`/api/worlds/${worldId}/records`);
-  function section(label: string, content: unknown, open = false) {
+  function section(key: Message | null, content: unknown, open = false, args?: { name: string }) {
     const details = document.createElement('details'), summary = document.createElement('summary'), pre = document.createElement('pre');
-    summary.textContent = label; pre.textContent = typeof content === 'string' ? content : JSON.stringify(content, null, 2); details.open = open; details.append(summary, pre); root.append(details);
+    if (key) label(summary, key, args); else summary.textContent = args?.name ?? '';
+    pre.textContent = typeof content === 'string' ? content : JSON.stringify(content, null, 2); details.open = open; details.append(summary, pre); root.append(details);
   }
-  section('当前世界状态', records.snapshot, true); section('提交文字与轮次', records.turns, true);
-  section('世界模式与动画进度', { mode: records.snapshot.mode ?? 'animated', playback: records.playback });
+  section('currentState', records.snapshot, true); section('submissions', records.turns, true);
+  section('progress', { mode: records.snapshot.mode ?? 'animated', playback: records.playback });
   const gallery=document.createElement('div');gallery.className='asset-grid archive-images';
   for(const asset of records.images??[]) {
-    const card=document.createElement('figure'), img=document.createElement('img'), label=document.createElement('figcaption'), original=document.createElement('a');
-    img.src=`/api/images/${asset.hash}`;img.alt=asset.name;img.loading='lazy';label.textContent=`${asset.name} · ${asset.credit}`;
-    original.href=`/api/images/${asset.imageId}/original`;original.textContent='下载原件';original.setAttribute('download','');
-    card.append(img,label,original);gallery.append(card);
+    const card=document.createElement('figure'), img=document.createElement('img'), caption=document.createElement('figcaption'), original=document.createElement('a');
+    img.src=`/api/images/${asset.hash}`;img.alt=asset.name;img.loading='lazy';
+    const name = document.createElement('span'), credit = document.createElement('span'), key = assetName(asset);
+    if (key) { label(name, key); img.dataset.i18nAlt = key; img.alt = translate(key); }
+    else name.textContent = asset.name;
+    if (asset.source === 'upload') label(credit, 'myArt'); else credit.textContent = asset.credit;
+    caption.append(name, ' · ', credit);
+    original.href=`/api/images/${asset.imageId}/original`;label(original, 'original');original.setAttribute('download','');
+    card.append(img,caption,original);gallery.append(card);
   }
-  root.append(gallery);section('图片来源、尺寸与文件哈希',records.images??[]);
+  root.append(gallery);section('imageSources',records.images??[]);
   for(const job of records.imageJobs??[]) {
-    section('图片生成记录',job);
+    section('imageJobs',job);
     for(const field of ['request_hash','response_hash']) if(typeof job[field]==='string') {
-      const link=document.createElement('a');link.href=`/api/artifacts/${job[field]}`;link.target='_blank';link.rel='noopener';link.textContent=field==='request_hash'?'查看图片模型原始请求 ↗':'查看图片模型原始响应（含图片编码）↗';root.append(link,document.createElement('br'));
+      const link=document.createElement('a');link.href=`/api/artifacts/${job[field]}`;link.target='_blank';link.rel='noopener';label(link, field === 'request_hash' ? 'imageRequest' : 'imageResponse');root.append(link,document.createElement('br'));
     }
   }
   // A current work remains inspectable after its originating turn has expired.
   if (records.snapshot.packageHash) {
     const pkg = await artifact<ScenePackage>(records.snapshot.packageHash);
-    section('当前作品 · 运行包与文件哈希', { packageHash: records.snapshot.packageHash, ...pkg, files: Object.keys(pkg.files) });
-    for (const [name, content] of Object.entries(pkg.files)) section(`当前作品 · ${name}`, content);
+    section('currentPackage', { packageHash: records.snapshot.packageHash, ...pkg, files: Object.keys(pkg.files) });
+    for (const [name, content] of Object.entries(pkg.files)) section('currentFile', content, false, { name });
   }
   for (const attempt of records.attempts) {
-    section(`生成尝试 · ${attempt.id}`, attempt);
-    for (const [field, label] of [['request_hash', '生成请求'], ['response_hash', '原始响应'], ['result_hash', '试跑结果']] as const) if (typeof attempt[field] === 'string') section(label, await artifact(attempt[field]));
+    section('attempt', attempt, false, { name: String(attempt.id) });
+    for (const [field, label] of [['request_hash', 'request'], ['response_hash', 'response'], ['result_hash', 'trial']] as const) if (typeof attempt[field] === 'string') section(label, await artifact(attempt[field]));
     if (typeof attempt.package_hash === 'string') {
       const pkg = await artifact<ScenePackage>(attempt.package_hash);
-      section('产物清单与文件哈希', { ...pkg, files: Object.keys(pkg.files) });
-      for (const [name, content] of Object.entries(pkg.files)) section(name, content, name === 'scene.js');
+      section('manifest', { ...pkg, files: Object.keys(pkg.files) });
+      for (const [name, content] of Object.entries(pkg.files)) section(null, content, name === 'scene.js', { name });
     }
   }
-  section('流式片段清单', records.chunks ?? []); section('鼠标与触摸记录', records.interactions ?? []);
-  section('世界版本', records.versions); section('事件时间线', records.events); section('档案保留策略', records.retention);
+  section('chunks', records.chunks ?? []); section('taps', records.interactions ?? []);
+  section('versions', records.versions); section('timeline', records.events); section('retention', records.retention);
 }
 
 async function playground() {
-  root.innerHTML = `<section class="playground" aria-label="创作画布"><div id="canvas" aria-label="空画布"></div><div class="composer-wrap"><p id="status" role="status" aria-live="polite"></p><form id="composer"><label class="sr-only" for="thought">你想让这里有什么？</label><input id="thought" name="thought" placeholder="你想让这里有什么？" autocomplete="off" maxlength="2000" enterkeyhint="done" /><button id="send" type="submit" aria-label="发送" disabled><span aria-hidden="true">↑</span></button></form><button id="retry" class="text-button" hidden>再试一次</button></div></section>`;
+  root.innerHTML = `<section class="playground" data-i18n-aria="canvas"><div id="canvas"></div>
+    <div class="composer-wrap"><p id="status" role="status" aria-live="polite"></p>
+    <form id="composer"><label class="sr-only" for="thought" data-i18n="thought"></label>
+    <input id="thought" name="thought" data-i18n-placeholder="thought" autocomplete="off" maxlength="2000" enterkeyhint="done">
+    <button id="send" type="submit" data-i18n-aria="send" disabled><span aria-hidden="true">↑</span></button></form>
+    <button id="retry" class="text-button" data-i18n="retry" hidden></button></div></section>`;
   const toolbar = document.createElement('header'); toolbar.className = 'world-toolbar';
-  toolbar.innerHTML = `<a class="wordmark" href="/" aria-label="创建新世界">就有了<span>一个念头，一个世界</span></a><nav class="world-modes" aria-label="世界模式"><a href="/?mode=animated" data-mode="animated">▷ 动态动画</a><a href="/?mode=storybook" data-mode="storybook">▤ 静态漫画／绘本</a></nav><div class="world-actions"><span id="mode-label"></span><button id="pause" type="button" hidden>暂停动画</button><a href="/" id="new-world">新世界 ＋</a></div>`;
+  toolbar.innerHTML = `<a class="wordmark" href="/" data-i18n="brand" data-i18n-aria="newWorld"></a>
+    <nav class="world-modes" data-i18n-aria="modes"><a href="/?mode=animated" data-mode="animated">▷ <span data-i18n="animated"></span></a>
+    <a href="/?mode=storybook" data-mode="storybook">▤ <span data-i18n="storybook"></span></a></nav>
+    <div class="world-actions"><span id="mode-label"></span><button id="pause" type="button" hidden></button>
+    <a href="/" id="new-world" data-i18n-aria="newWorld"><span data-i18n="newWorld"></span> ＋</a></div>`;
+  toolbar.querySelector('.world-actions')!.append(languagePicker());
   root.querySelector('.playground')!.prepend(toolbar);
+  localize(root);
   const pause = document.querySelector<HTMLButtonElement>('#pause')!, modeLabel = document.querySelector<HTMLElement>('#mode-label')!;
   const input = document.querySelector<HTMLInputElement>('#thought')!, send = document.querySelector<HTMLButtonElement>('#send')!, form = document.querySelector<HTMLFormElement>('#composer')!;
   const status = document.querySelector<HTMLElement>('#status')!, retry = document.querySelector<HTMLButtonElement>('#retry')!, host = document.querySelector<HTMLElement>('#canvas')!;
   let composing = false, failedTurn: string | undefined, worldId = location.pathname.match(/^\/w\/([\w-]+)$/)?.[1];
   const renderer = new Application();
   await renderer.init({ resizeTo: host, background: '#ffffff', antialias: true, autoDensity: true, resolution: Math.min(devicePixelRatio, 2), preference: 'webgl' });
-  host.append(renderer.canvas); renderer.canvas.setAttribute('aria-label', '世界画布');
+  host.append(renderer.canvas); renderer.canvas.dataset.i18nAria = 'canvas'; renderer.canvas.setAttribute('aria-label', translate('canvas'));
   let current: WorldSnapshot;
   let interactions: InteractionQueue | undefined;
   const presentation = new Presentation(renderer, host, id => interactions?.enqueue(id));
@@ -93,7 +112,7 @@ async function playground() {
   let checkpointing = false;
   function draw(operations: DrawOperation[], bindings = current?.bindings ?? []) {
     presentation.set(operations, bindings, current.mode ?? 'animated', firstDisplay); firstDisplay = false;
-    pause.hidden = !presentation.animated; pause.textContent = presentation.paused ? '播放动画' : '暂停动画';
+    pause.hidden = !presentation.animated; label(pause, presentation.paused ? 'play' : 'pause');
   }
   if (!worldId) {
     const mode: WorldMode = new URLSearchParams(location.search).get('mode') === 'storybook' ? 'storybook' : 'animated';
@@ -103,9 +122,9 @@ async function playground() {
   const localWorldId = worldId;
   const art = await artPicker(localWorldId,document.querySelector<HTMLElement>('.composer-wrap')!,api);
   const mode = current.mode ?? 'animated'; root.dataset.mode = mode;
-  modeLabel.textContent = mode === 'storybook' ? '静态漫画／绘本' : '动态动画';
+  label(modeLabel, mode);
+  if (art.fixture) { input.dataset.i18nPlaceholder = 'sampleHint'; input.placeholder = translate('sampleHint'); }
   toolbar.querySelector<HTMLAnchorElement>(`[data-mode="${mode}"]`)?.setAttribute('aria-current', 'page');
-  document.title = '就有了 · 一个小小的世界';
   async function applySnapshot(snapshot: WorldSnapshot, force = false) {
     if (interactions?.pending && !force) return;
     let background = '#ffffff', prepared:Awaited<ReturnType<Textures['prepare']>>|undefined, pkg:ScenePackage|undefined;
@@ -139,12 +158,12 @@ async function playground() {
     }
     finally { checkpointing=false; }
   }
-  pause.onclick = () => { presentation.pause(!presentation.paused); pause.textContent = presentation.paused ? '播放动画' : '暂停动画'; void checkpoint().catch(() => {}); };
+  pause.onclick = () => { presentation.pause(!presentation.paused); label(pause, presentation.paused ? 'play' : 'pause'); void checkpoint().catch(() => {}); };
   const clockTimer = setInterval(() => { void checkpoint().catch(() => {}); }, 2000);
   document.addEventListener('visibilitychange', () => { if(document.hidden) void checkpoint(true).catch(() => {}); });
   window.addEventListener('pagehide', () => { clearInterval(clockTimer); void checkpoint(true).catch(() => {}); }, {once:true});
   interactions = new InteractionQueue({ worldId: localWorldId, snapshot: () => current, load: loadPackage, api,
-    accept: snapshot => applySnapshot(snapshot, true), preview: (snapshot, count) => { draw(snapshot.operations, snapshot.bindings); root.dataset.pendingEvents = String(count); }, status: message => { status.textContent = message; } });
+    accept: snapshot => applySnapshot(snapshot, true), preview: (snapshot, count) => { draw(snapshot.operations, snapshot.bindings); root.dataset.pendingEvents = String(count); }, status: message => label(status, message) });
   // Resolve any lost acknowledgement before replaying queued local events after reload.
   void interactions.flush().then(() => interactions!.preview()).catch(() => interactions!.preview());
   const processed = new Set<string>();
@@ -171,7 +190,7 @@ async function playground() {
     try {
     await interactions!.flush();
     const candidate = await api<Candidate>(`/api/attempts/${attemptId}/candidate`);
-    status.textContent = '正在让它出现…';
+    label(status, 'making');
     const receipt: TrialResult = { attemptId, packageHash: candidate.packageHash, baseVersionId: candidate.baseVersionId, baseRevision: candidate.baseRevision, ok: true };
     try {
       receipt.output = await runIsolated(candidate.package, candidate.baseline.state, candidate.packageHash, { migrate: true, previousProtocol: candidate.previousProtocol });
@@ -192,11 +211,11 @@ async function playground() {
   let eventWork = Promise.resolve();
   const stream = new EventSource(`/api/worlds/${localWorldId}/events`);
   stream.onmessage = message => {
-    const event = JSON.parse(message.data) as { kind: string; payload: { attemptId?: string; turnId?: string; versionId?: string; error?: string; name?:string } };
+    const event = JSON.parse(message.data) as { kind: string; payload: { attemptId?: string; turnId?: string; versionId?: string; reason?: string; name?:string } };
     eventWork = eventWork.then(async () => {
       if (event.kind === 'image.generating') {
         const activity=await api<{attempts:{id:string;status:string}[]}>(`/api/worlds/${localWorldId}/activity`);
-        if(activity.attempts.some(a=>a.id===event.payload.attemptId&&a.status==='generating')) status.textContent=`正在画${event.payload.name??'新图片'}…`;
+        if(activity.attempts.some(a=>a.id===event.payload.attemptId&&a.status==='generating')) label(status, event.payload.name ? 'drawing' : 'making', { name: event.payload.name ?? '' });
       } else if (event.kind === 'candidate.ready' && event.payload.attemptId) {
         // Replayed events can describe attempts already finalized; query current status.
         const records = await api<{ attempts: { id: string; status: string }[] }>(`/api/worlds/${localWorldId}/activity`);
@@ -205,17 +224,17 @@ async function playground() {
         const snapshot = await api<WorldSnapshot>(`/api/worlds/${localWorldId}`);
         if (snapshot.versionId !== current.versionId) await applySnapshot(snapshot);
         // Playing the existing scene must not dismiss a failed generation's retry.
-        if (event.kind === 'version.committed') { status.textContent = ''; failedTurn = undefined; retry.hidden = true; }
+        if (event.kind === 'version.committed') { clearLabel(status); failedTurn = undefined; retry.hidden = true; }
       } else if (event.kind === 'attempt.failed') {
         const records = await api<{ turns: { id: string; status: string }[] }>(`/api/worlds/${localWorldId}/activity`);
         if (records.turns.find(t => t.id === event.payload.turnId)?.status === 'failed') {
-          status.textContent = '这次没有变出来，可以改一句或再试一次。'; failedTurn = event.payload.turnId; retry.hidden = false;
+          label(status, event.payload.reason === 'unsupported_sample' ? 'fixtureFailed' : 'failed'); failedTurn = event.payload.turnId; retry.hidden = false;
         }
       }
-    }).catch(error => { status.textContent = `暂时没连上，正在重新连接…`; console.error(error); });
+    }).catch(error => { label(status, 'connecting'); console.error(error); });
   };
-  stream.onerror = () => { status.textContent = '连接中，眼前的世界会留在这里…'; };
-  stream.onopen = () => { if (status.textContent?.startsWith('连接中')) status.textContent = ''; void persistReceipt().catch(() => {}); };
+  stream.onerror = () => { label(status, 'connecting'); };
+  stream.onopen = () => { if (status.dataset.i18n === 'connecting') clearLabel(status); void persistReceipt().catch(() => {}); };
   // A lost POST response does not require waiting for an SSE reconnection.
   const receiptTimer = setInterval(() => { void persistReceipt().catch(() => {}); void interactions!.flush().catch(() => {}); void resumeCandidates().catch(() => {}); }, 2000);
   window.addEventListener('pagehide', () => { stream.close(); clearInterval(receiptTimer); }, { once: true });
@@ -228,21 +247,21 @@ async function playground() {
     const stored = localStorage.getItem(outboxKey);
     if (!stored) return;
     const value = JSON.parse(stored);
-    if (value.expiresAt && value.expiresAt <= new Date().toISOString()) { localStorage.removeItem(outboxKey); status.textContent = '之前未发送的文字已过期，可以重新写一句。'; return; }
+    if (value.expiresAt && value.expiresAt <= new Date().toISOString()) { localStorage.removeItem(outboxKey); label(status, 'expired'); return; }
     await interactions!.flush();
-    await api(`/api/worlds/${localWorldId}/turns`, { text: value.text, clientSubmissionId: value.clientSubmissionId, ...(value.artSelection??{}) });
+    await api(`/api/worlds/${localWorldId}/turns`, { text: value.text, clientSubmissionId: value.clientSubmissionId, uiLocale: value.uiLocale, ...(value.artSelection??{}) });
     localStorage.removeItem(outboxKey);
   }
   form.addEventListener('submit', event => {
     event.preventDefault();
     if (composing || !input.value.trim()) return;
-    if (localStorage.getItem(outboxKey)) { status.textContent = '上一句话还在发送，请稍等一下。'; return; }
+    if (localStorage.getItem(outboxKey)) { label(status, 'sending'); return; }
     const clientSubmissionId = clientId();
-    localStorage.setItem(outboxKey, JSON.stringify({ text: input.value, clientSubmissionId, artSelection:art.selection(), expiresAt: addCalendarMonths(new Date(), 3).toISOString() }));
-    status.textContent = '收到啦，等一下…'; input.value = ''; send.disabled = true; retry.hidden = true;
-    void flushSubmission().catch(() => { status.textContent = '这句话已经记住，连上后会继续发送。'; });
+    localStorage.setItem(outboxKey, JSON.stringify({ text: input.value, clientSubmissionId, uiLocale: uiLocale(), artSelection:art.selection(), expiresAt: addCalendarMonths(new Date(), 3).toISOString() }));
+    label(status, 'received'); input.value = ''; send.disabled = true; retry.hidden = true;
+    void flushSubmission().catch(() => { label(status, 'offline'); });
   });
-  retry.onclick = () => { if (failedTurn) { retry.hidden = true; status.textContent = '再试一次…'; void api(`/api/turns/${failedTurn}/retry`, {}).catch(() => { retry.hidden = false; status.textContent = '暂时没连上，请稍后重试。'; }); } };
+  retry.onclick = () => { if (failedTurn) { retry.hidden = true; label(status, 'retrying'); void api(`/api/turns/${failedTurn}/retry`, {}).catch(() => { retry.hidden = false; label(status, 'retryLater'); }); } };
   const outboxTimer = setInterval(() => { void flushSubmission().catch(() => {}); }, 2000);
   window.addEventListener('pagehide', () => clearInterval(outboxTimer), { once: true });
   await flushSubmission().catch(() => {});

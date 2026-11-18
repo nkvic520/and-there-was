@@ -12,13 +12,13 @@ A thought becomes a little world. A canvas for children and the grown-ups creati
 - Create artwork with Seedream, choose free assets, or upload a child’s own drawing.
 - Keep the same canvas and return to your work using its saved link.
 
-The app interface is currently in Simplified Chinese.
+The app has ten interface languages. It uses your browser preferences or English, and remembers your choice in the language menu on this device. Each saved world has its own story language.
 
 ## Try the demo
 
-There is no public hosted demo yet. Run the app locally and send **「有一个球」** (“There is a ball”). The built-in sample needs no model credentials and recognizes this exact Chinese phrase.
+Run the app locally and send **There is a ball** to try it without a model key. A public demo URL will be added when available.
 
-To try selected images without a model key, choose pictures under **素材／我的作品**, then send **「使用选中的素材」** (“Use the selected assets”).
+To try pictures, choose them under **Assets / my artwork**, then send **Use the selected assets**.
 
 ![Built-in sample: a ball on the canvas](docs/media/ball.png)
 

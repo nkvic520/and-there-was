@@ -12,13 +12,13 @@ Une idée devient un petit monde. Un canevas pour les enfants et les adultes qui
 - Créez des images avec Seedream, choisissez des ressources gratuites ou importez un dessin de votre enfant.
 - Continuez sur le même canevas et retrouvez votre création grâce à son lien enregistré.
 
-L’interface de l’application est actuellement en chinois simplifié.
+L’interface propose dix langues. Elle suit les préférences du navigateur et utilise l’anglais si aucune ne correspond. Cet appareil mémorise votre choix dans le menu des langues. Chaque monde conserve la langue de son histoire.
 
 ## Essayer la démo
 
-Aucune démo publique hébergée n’est encore disponible. Lancez l’application en local et envoyez **「有一个球」** (« Il y a une balle »). L’exemple intégré ne nécessite aucune clé de modèle et reconnaît cette phrase chinoise exacte.
+Lancez l’application localement et envoyez **Il y a une balle** pour essayer sans clé. Le lien de démonstration publique sera ajouté dès qu’il sera disponible.
 
-Pour essayer les images sans clé de modèle, sélectionnez des images dans **素材／我的作品**, puis envoyez **「使用选中的素材」** (« Utiliser les ressources sélectionnées »).
+Pour essayer les images, choisissez-les dans **Images / mes dessins**, puis envoyez **Utilise les images choisies**.
 
 ![Exemple intégré : une balle sur le canevas](../../docs/media/ball.png)
 
