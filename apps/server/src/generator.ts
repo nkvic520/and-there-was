@@ -1,9 +1,17 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { sha256, type ScenePackage, type WorldSnapshot } from '@and-there-was/scene';
+export interface GenerationContext {
+  previousPackage?: ScenePackage;
+  previousFailure?: { error: string; package?: ScenePackage; content?: string };
+  signal: AbortSignal;
+  request(value: unknown): void;
+  chunk(text: string): void;
+  response(value: unknown): void;
+}
 export interface Generator {
   readonly id: string;
-  generate(text: string, baseline: WorldSnapshot): Promise<ScenePackage>;
+  generate(text: string, baseline: WorldSnapshot, context?: GenerationContext): Promise<ScenePackage>;
 }
 export class FixtureGenerator implements Generator {
   readonly id = 'fixture/ball-v1';
