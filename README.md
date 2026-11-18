@@ -9,6 +9,7 @@ A thought becomes a little world. A canvas for children and the grown-ups creati
 - Start with an empty canvas and bring a ball into the scene with a sentence.
 - Describe a world, change it with DeepSeek, and add click or touch interactions.
 - Choose a lively animated world or a still comic / picture-book page.
+- Create artwork with Seedream, choose free assets, or upload a child’s own drawing.
 - Keep the same canvas and return to your work using its saved link.
 
 The app interface is currently in Simplified Chinese.
@@ -16,6 +17,8 @@ The app interface is currently in Simplified Chinese.
 ## Try the demo
 
 There is no public hosted demo yet. Run the app locally and send **「有一个球」** (“There is a ball”). The built-in sample needs no model credentials and recognizes this exact Chinese phrase.
+
+To try selected images without a model key, choose pictures under **素材／我的作品**, then send **「使用选中的素材」** (“Use the selected assets”).
 
 ![Built-in sample: a ball on the canvas](docs/media/ball.png)
 
@@ -56,10 +59,13 @@ Set values in `.env` and restart the service after changes. Keep API keys on the
 | `DATA_DIR` | Saved works and records; default `./data`. |
 | `GENERATOR_MODE` | `fixture` for the bundled sample; `deepseek` for free-form creation. |
 | `DEEPSEEK_API_KEY / DEEPSEEK_MODEL / DEEPSEEK_BASE_URL` | DeepSeek API key, model and endpoint. |
+| `SEEDREAM_API_KEY / SEEDREAM_MODEL / SEEDREAM_BASE_URL / SEEDREAM_SIZE` | Seedream API key, model, endpoint and image size. |
 
 ### AI services
 
 Enable DeepSeek by setting `GENERATOR_MODE=deepseek` and `DEEPSEEK_API_KEY`. Other connection settings are listed in `.env.example`.
+
+DeepSeek arranges the scene and interactions. For AI artwork, Seedream draws the images. Free assets and uploads do not call the image model; scene creation in DeepSeek mode still uses the text model.
 
 Real model requests may incur provider charges. Existing works can be reopened without generating them again.
 
@@ -72,4 +78,4 @@ This is a private, single-owner app without built-in accounts. For internet acce
 
 ## License
 
-Code: [MIT](LICENSE).
+Code: [MIT](LICENSE). Bundled artwork: [Kenney CC0 assets](fixtures/library/README.md). Uploaded and generated works are not included in the code license.

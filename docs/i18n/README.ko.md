@@ -9,6 +9,7 @@
 - 빈 캔버스에서 시작해 한 문장으로 공을 나타나게 합니다.
 - DeepSeek로 세상을 설명하고 바꾸며, 클릭이나 터치로 상호작용을 더합니다.
 - 계속 움직이는 세계 또는 정지된 만화·그림책 페이지를 선택합니다.
+- Seedream으로 그림을 생성하거나 무료 소재, 아이가 직접 그려 업로드한 그림을 사용합니다.
 - 같은 캔버스에서 계속 만들고, 저장한 링크로 작품에 돌아올 수 있습니다.
 
 앱 화면은 현재 중국어 간체로 제공됩니다.
@@ -16,6 +17,8 @@
 ## 데모 체험
 
 공개된 호스팅 데모는 아직 없습니다. 로컬에서 실행한 뒤 **「有一个球」**(“공이 하나 있어요”)를 보내세요. 기본 예제에는 모델 API 키가 필요하지 않으며, 이 중국어 문장을 정확히 입력해야 합니다.
+
+모델 키 없이 이미지를 체험하려면 **素材／我的作品**에서 그림을 선택한 뒤 **「使用选中的素材」**(“선택한 소재 사용”)를 보내세요.
 
 ![기본 예제: 캔버스에 나타난 공](../../docs/media/ball.png)
 
@@ -56,10 +59,13 @@ npm start
 | `DATA_DIR` | 작품 및 기록 저장 경로. 기본값은 `./data`입니다. |
 | `GENERATOR_MODE` | 기본 예제는 `fixture`, 자유로운 창작은 `deepseek`입니다. |
 | `DEEPSEEK_API_KEY / DEEPSEEK_MODEL / DEEPSEEK_BASE_URL` | DeepSeek API 키, 모델 및 엔드포인트. |
+| `SEEDREAM_API_KEY / SEEDREAM_MODEL / SEEDREAM_BASE_URL / SEEDREAM_SIZE` | Seedream API 키, 모델, 엔드포인트 및 이미지 크기. |
 
 ### AI 서비스
 
 `GENERATOR_MODE=deepseek`와 `DEEPSEEK_API_KEY`를 설정하면 DeepSeek를 사용할 수 있습니다. 나머지 연결 설정은 `.env.example`을 참고하세요.
+
+DeepSeek는 장면과 상호작용을 구성하고, Seedream은 AI 그림을 생성합니다. 무료 소재와 업로드 자체는 이미지 모델을 호출하지 않지만, DeepSeek 모드의 장면 구성에는 텍스트 모델을 사용합니다.
 
 실제 모델 요청에는 공급업체 요금이 발생할 수 있습니다. 저장한 작품을 다시 여는 데는 재생성이 필요하지 않습니다.
 
@@ -72,4 +78,4 @@ npm start
 
 ## 라이선스
 
-코드: [MIT](../../LICENSE).
+코드: [MIT](../../LICENSE). 기본 그림: [Kenney CC0 소재](../../fixtures/library/README.md). 업로드하거나 생성한 작품에는 코드 라이선스가 적용되지 않습니다.

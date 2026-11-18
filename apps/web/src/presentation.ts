@@ -1,4 +1,4 @@
-import { Application, Container, Graphics, Text, FillGradient, Rectangle, Circle } from 'pixi.js';
+import { Application, Container, Graphics, Text, FillGradient, Rectangle, Circle, Sprite, Texture } from 'pixi.js';
 import { canonical, sampleMotion, type DrawOperation, type EventBinding, type WorldMode, type MotionCues } from '@and-there-was/scene';
 
 interface Visual { container: Container; body: Container; op: DrawOperation; geometry: string; gradients: FillGradient[]; born: number; retiring?: number; from?: { x:number;y:number;rotation:number;at:number } }
@@ -12,6 +12,8 @@ export class Presentation {
   private moving = false;
   private lastStamp = 0;
   private cues: MotionCues = {};
+  private textures = new Map<string,Texture>();
+  setTextures(textures:Map<string,Texture>) { this.textures=textures; }
   constructor(private app: Application, private host: HTMLElement, private tap: (id: string) => void) {
     app.stage.addChild(this.root); app.ticker.maxFPS = 60;
     app.ticker.add(ticker => {
@@ -47,7 +49,7 @@ export class Presentation {
       if (node.op.x !== op.x || node.op.y !== op.y || node.op.rotation !== op.rotation) node.from = { x:node.container.x, y:node.container.y, rotation:node.container.rotation, at:now };
       node.op = op; node.retiring = undefined;
       const { x, y, parent, rotation, alpha, motions, motionKey, enter, ...shape } = op;
-      const geometry = canonical(shape);
+      const geometry = canonical(shape) + (op.asset ? `:${this.textures.get(op.asset)?.uid}` : '');
       if (geometry !== node.geometry) { this.paint(node); node.geometry = geometry; }
       node.container.eventMode = this.bindings.has(op.id) ? 'static' : op.kind === 'group' ? 'passive' : 'none';
       node.container.cursor = this.bindings.has(op.id) ? 'pointer' : 'default';
@@ -75,6 +77,11 @@ export class Presentation {
     node.body.removeChildren().forEach(child => child.destroy({ children:true })); node.gradients.forEach(g => g.destroy()); node.gradients = [];
     const op = node.op, w = op.radiusX*2000, h = op.radiusY*2000;
     if (op.kind === 'group') return;
+    if (op.kind === 'sprite') {
+      const texture=this.textures.get(op.asset!); if(!texture) throw new Error('素材尚未加载');
+      const sprite=new Sprite(texture);sprite.anchor.set(.5);sprite.scale.set(Math.min(w/texture.width,h/texture.height));
+      node.body.addChild(sprite);return;
+    }
     if (op.kind === 'text') {
       const label = new Text({ text:op.text ?? '', resolution:1, style:{ fontFamily:'"Microsoft YaHei", "Segoe UI", sans-serif', fontSize:(op.fontSize ?? .035)*1000, fill:op.color, fontWeight:'500', wordWrap:true, wordWrapWidth:w, breakWords:true, align:op.align ?? 'center', lineHeight:(op.fontSize ?? .035)*1450 } });
       label.anchor.set(op.align === 'left' ? 0 : op.align === 'right' ? 1 : .5, .5);

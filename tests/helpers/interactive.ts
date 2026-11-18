@@ -29,3 +29,7 @@ export function streamReply(content: string, finish = 'stop', done = true) {
   return `data: ${JSON.stringify({ id: 'mock-completion', choices: [{ delta: { content }, finish_reason: null }] })}\n\n` +
     `data: ${JSON.stringify({ id: 'mock-completion', choices: [{ delta: {}, finish_reason: finish }], usage: { prompt_tokens: 10, completion_tokens: 20 } })}\n\n` + (done ? 'data: [DONE]\n\n' : '');
 }
+export function withImageWorkflow(content:string) {
+  const value=JSON.parse(content); value.protocol.schemaVersion=4;
+  return JSON.stringify({...value,assetIds:[],assetRequests:[]});
+}

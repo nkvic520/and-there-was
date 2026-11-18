@@ -23,7 +23,26 @@ Set `GENERATOR_MODE=deepseek` and your own `DEEPSEEK_API_KEY` in `.env`, then re
 
 The model can take some time and may fail. **再试一次** retries a failed request; it sends another model request and may incur a charge. If an attempt fails, the last saved scene stays available.
 
-Set `GENERATOR_MODE=fixture` for the no-key sample. This mode recognizes **有一个球**, rather than arbitrary sentences.
+Set `GENERATOR_MODE=fixture` for the no-key sample. This mode recognizes **有一个球** and **使用选中的素材**, rather than arbitrary sentences.
+
+## Choose artwork
+
+Open the artwork selector below the input box. This choice is independent of the world type.
+
+### AI 画图 — AI artwork
+
+Configure Seedream in addition to DeepSeek. New environments and characters can be drawn separately so the characters can move. Existing pictures can be reused for motion changes. An image character can move, scale, rotate and react to a click; a single image does not provide articulated limb animation.
+
+### 素材／我的作品 — Assets / my artwork
+
+Select bundled images or upload a drawing. Give an upload a name and choose its role: **角色／贴纸** (character / sticker), **背景** (background) or **整页画作** (full-page artwork). The selected images accompany your next sentence. In sample mode, send **使用选中的素材** to use them.
+
+- Static PNG, JPEG and WebP files up to **8 MB** are supported. If a large photo is rejected, reduce its dimensions before uploading.
+- The original file is kept. The display copy is oriented correctly and resized when needed. Paper backgrounds are kept; uploading does not automatically cut out or repaint the drawing.
+- In AI artwork mode, the checkbox **允许把选中的上传作品发给 Seedream 作为参考图** explicitly permits sending the selected uploads to Seedream as reference images for that submission. Selecting or uploading an image alone does not grant this permission.
+- Bundled [Kenney assets](../../fixtures/library/README.md) use CC0 and are not sent as image-model references. Existing Seedream images can be used as references for later edits.
+
+Uploading and using free assets does not call Seedream. When `GENERATOR_MODE=deepseek`, composing a scene still uses DeepSeek.
 
 ## Install and configure
 
@@ -61,6 +80,12 @@ Open [http://127.0.0.1:3000](http://127.0.0.1:3000). Node startup reads the root
 | `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` | DeepSeek service address. |
 | `DEEPSEEK_MODEL` | `deepseek-flash` | Model to use. |
 | `ARCHIVE_RETENTION_MONTHS` | `3` | Supported retention period for real records. |
+| `SEEDREAM_API_KEY` | Empty | Your server-side Volcano Engine Ark API key. |
+| `SEEDREAM_BASE_URL` | `https://ark.cn-beijing.volces.com/api/v3` | Seedream service address. |
+| `SEEDREAM_MODEL` | `doubao-seedream-5-5-261028` | Enabled model or endpoint ID. |
+| `SEEDREAM_SIZE` | `2K` | Requested image size. |
+
+Enable the selected Seedream model in your Volcano Engine Ark account. The default model supports the image settings used by the app; other models must support the same settings.
 
 Compose sets the in-container listen address, port and data path in `compose.yml`, and publishes port 3000 on the host’s loopback address. Change the port mapping there if needed. Model settings are read from the root `.env` file.
 
@@ -76,9 +101,9 @@ For Node deployments, keep the entire directory selected by `DATA_DIR`. For Comp
 
 After an update or restart, reopen the complete world link rather than the home page. Saved game state and saved animation progress are restored. A sudden exit may lose animation time that had not yet been saved. Reopening a saved world does not call the model again.
 
-Real records are kept for **three calendar months per record**. The current work and the files it needs remain available. Expired inputs, model requests and responses, and unneeded history are cleaned up automatically. Bundled samples are retained. Copies in your own backups and provider-side records follow their own retention rules.
+Real records are kept for **three calendar months per record**. The current work and the files it needs remain available. Expired inputs, model requests and responses, and unneeded history are cleaned up automatically. Unused uploaded or generated images also expire after three months; images and originals still used by the current work are retained. Bundled samples are retained unless used with real uploaded material. Copies in your own backups and provider-side records follow their own retention rules.
 
-The owner can open `/inspect/<worldId>` to view saved inputs, generated content and versions. This is an owner’s view, separate from the creation screen.
+The owner can open `/inspect/<worldId>` to view saved inputs, generated content and versions, including image sources and original-image downloads. This is an owner’s view, separate from the creation screen.
 
 ## Common questions
 
@@ -88,6 +113,6 @@ The owner can open `/inspect/<worldId>` to view saved inputs, generated content 
 
 **Why can’t the phone connect?** Use the computer’s LAN address, make sure both devices can reach that network, and allow the app’s port through the computer’s firewall.
 
-**Why is generation failing?** Check the configured provider, model access and account balance. After updating keys or model settings, restart the service. The `/api/health` page shows the active model, without displaying the keys. A failed scene can be retried while keeping the last saved work.
+**Why is generation failing?** Check the configured provider, model access and account balance. After updating keys or model settings, restart the service. The `/api/health` page shows the active model and whether image generation is configured, without displaying the keys. A failed scene can be retried while keeping the last saved work.
 
 **Why is the picture still?** A picture-book world is intentionally still. In an animated world, check the play/pause control and the device’s reduced-motion setting.

@@ -1,0 +1,74 @@
+[
+  {
+    "id": "free_rabbit",
+    "file": "rabbit.png",
+    "name": "小兔贴纸",
+    "role": "character",
+    "credit": "Kenney · CC0",
+    "sourceUrl": "https://kenney.nl/assets/animal-pack-remastered"
+  },
+  {
+    "id": "free_bear",
+    "file": "bear.png",
+    "name": "小熊贴纸",
+    "role": "character",
+    "credit": "Kenney · CC0",
+    "sourceUrl": "https://kenney.nl/assets/animal-pack-remastered"
+  },
+  {
+    "id": "free_owl",
+    "file": "owl.png",
+    "name": "猫头鹰贴纸",
+    "role": "character",
+    "credit": "Kenney · CC0",
+    "sourceUrl": "https://kenney.nl/assets/animal-pack-remastered"
+  },
+  {
+    "id": "free_frog",
+    "file": "frog.png",
+    "name": "青蛙贴纸",
+    "role": "character",
+    "credit": "Kenney · CC0",
+    "sourceUrl": "https://kenney.nl/assets/animal-pack-remastered"
+  },
+  {
+    "id": "free_duck",
+    "file": "duck.png",
+    "name": "小鸭贴纸",
+    "role": "character",
+    "credit": "Kenney · CC0",
+    "sourceUrl": "https://kenney.nl/assets/animal-pack-remastered"
+  },
+  {
+    "id": "free_forest",
+    "file": "forest.png",
+    "name": "森林背景",
+    "role": "background",
+    "credit": "Kenney · CC0",
+    "sourceUrl": "https://kenney.nl/assets/background-elements"
+  },
+  {
+    "id": "free_desert",
+    "file": "desert.png",
+    "name": "沙漠背景",
+    "role": "background",
+    "credit": "Kenney · CC0",
+    "sourceUrl": "https://kenney.nl/assets/background-elements"
+  },
+  {
+    "id": "free_tree",
+    "file": "tree.png",
+    "name": "树木",
+    "role": "character",
+    "credit": "Kenney · CC0",
+    "sourceUrl": "https://kenney.nl/assets/background-elements"
+  },
+  {
+    "id": "free_cloud",
+    "file": "cloud.png",
+    "name": "云朵",
+    "role": "character",
+    "credit": "Kenney · CC0",
+    "sourceUrl": "https://kenney.nl/assets/background-elements"
+  }
+]

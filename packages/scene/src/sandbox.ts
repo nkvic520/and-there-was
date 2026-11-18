@@ -64,7 +64,7 @@ export async function executePackage(engine: QuickJSWASMModule, pkg: ScenePackag
         ${pkg.sdkVersion >= 2 ? `,
         rect: (id, x, y, width, height, color, alpha = 1) => draw(JSON.stringify({kind:'rect',id,x,y,radiusX:width/2,radiusY:height/2,color,alpha})),
         onTap: (targetId, event, payload = {}) => bind(JSON.stringify({targetId,event,payload}))` : ''}
-        ${pkg.sdkVersion === 3 ? `,
+        ${pkg.sdkVersion >= 3 ? `,
         node: spec => {
           const {width = .1, height = width, ...fields} = spec;
           draw(JSON.stringify({kind:'ellipse',x:0,y:0,radiusX:width/2,radiusY:height/2,color:'#ffffff',alpha:1,...fields}));
@@ -95,7 +95,7 @@ export async function executePackage(engine: QuickJSWASMModule, pkg: ScenePackag
     } finally { exports.dispose(); }
     if (bridgeError) throw bridgeError;
     const output = { state, operations, ...(pkg.sdkVersion >= 2 ? { bindings } : {}), durationMs: performance.now() - started, runtimeVersion: runtimeVersion(pkg.sdkVersion) };
-    validateOutput(protocol, output);
+    validateOutput(protocol, output, pkg.assets);
     return output;
   } catch (error) {
     throw new Error(bridgeError?.message ?? (error instanceof Error ? error.message : JSON.stringify(error)));

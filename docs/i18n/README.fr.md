@@ -9,6 +9,7 @@ Une idée devient un petit monde. Un canevas pour les enfants et les adultes qui
 - Partez d’un canevas vide et faites apparaître une balle avec une phrase.
 - Décrivez et modifiez un monde avec DeepSeek, puis ajoutez des interactions par clic ou toucher.
 - Choisissez un monde animé ou une page fixe de bande dessinée ou de livre illustré.
+- Créez des images avec Seedream, choisissez des ressources gratuites ou importez un dessin de votre enfant.
 - Continuez sur le même canevas et retrouvez votre création grâce à son lien enregistré.
 
 L’interface de l’application est actuellement en chinois simplifié.
@@ -16,6 +17,8 @@ L’interface de l’application est actuellement en chinois simplifié.
 ## Essayer la démo
 
 Aucune démo publique hébergée n’est encore disponible. Lancez l’application en local et envoyez **「有一个球」** (« Il y a une balle »). L’exemple intégré ne nécessite aucune clé de modèle et reconnaît cette phrase chinoise exacte.
+
+Pour essayer les images sans clé de modèle, sélectionnez des images dans **素材／我的作品**, puis envoyez **「使用选中的素材」** (« Utiliser les ressources sélectionnées »).
 
 ![Exemple intégré : une balle sur le canevas](../../docs/media/ball.png)
 
@@ -56,10 +59,13 @@ Définissez les valeurs dans `.env`, puis redémarrez le service après toute mo
 | `DATA_DIR` | Dossier des créations et des archives ; valeur par défaut : `./data`. |
 | `GENERATOR_MODE` | `fixture` pour l’exemple intégré ; `deepseek` pour la création libre. |
 | `DEEPSEEK_API_KEY / DEEPSEEK_MODEL / DEEPSEEK_BASE_URL` | Clé d’API, modèle et adresse de DeepSeek. |
+| `SEEDREAM_API_KEY / SEEDREAM_MODEL / SEEDREAM_BASE_URL / SEEDREAM_SIZE` | Clé d’API, modèle, adresse et taille d’image de Seedream. |
 
 ### Services d’IA
 
 Activez DeepSeek avec `GENERATOR_MODE=deepseek` et `DEEPSEEK_API_KEY`. Les autres paramètres de connexion figurent dans `.env.example`.
+
+DeepSeek organise la scène et les interactions. Seedream dessine les images générées par IA. Les ressources gratuites et les imports ne font pas appel au modèle d’images ; la création de scènes en mode DeepSeek utilise toujours le modèle de texte.
 
 Les requêtes réelles aux modèles peuvent être facturées par leurs fournisseurs. Une création enregistrée peut être rouverte sans être générée à nouveau.
 
@@ -72,4 +78,4 @@ L’application est privée, destinée à un seul propriétaire et sans gestion 
 
 ## Licence
 
-Code : [MIT](../../LICENSE).
+Code : [MIT](../../LICENSE). Images incluses : [ressources CC0 de Kenney](../../fixtures/library/README.md). Les créations importées et générées ne sont pas couvertes par la licence du code.

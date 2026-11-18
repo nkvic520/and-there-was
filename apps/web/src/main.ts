@@ -1,8 +1,10 @@
 import { Application } from 'pixi.js';
-import { addCalendarMonths, canonical, type Candidate, type DrawOperation, type ScenePackage, type WorldSnapshot, type TrialResult, type WorldMode, type MotionCues } from '@and-there-was/scene';
+import { addCalendarMonths, canonical, type Candidate, type DrawOperation, type ScenePackage, type WorldSnapshot, type TrialResult, type WorldMode, type MotionCues, type SceneAsset } from '@and-there-was/scene';
 import { runIsolated } from './runtime';
 import { InteractionQueue, clientId } from './interactions';
 import { Presentation } from './presentation';
+import { Textures } from './textures';
+import { artPicker } from './art-picker';
 import './style.css';
 
 const root = document.querySelector<HTMLElement>('#app')!;
@@ -31,13 +33,27 @@ async function inspect(worldId: string) {
   title.textContent = '世界档案'; back.textContent = '回到画布 ↗'; back.href = `/w/${worldId}`;
   header.append(title, back); root.append(header);
   const description = document.createElement('p'); description.textContent = '原文、生成产物与互动记录 · 真实会话保留 3 个月，当前作品及恢复所需文件继续保留。'; root.append(description);
-  const records = await api<{ snapshot: WorldSnapshot; turns: Record<string, unknown>[]; attempts: Record<string, unknown>[]; versions: WorldSnapshot[]; events: unknown[]; chunks?: unknown[]; interactions?: unknown[]; retention?: unknown; playback?: unknown }>(`/api/worlds/${worldId}/records`);
+  const records = await api<{ snapshot: WorldSnapshot; turns: Record<string, unknown>[]; attempts: Record<string, unknown>[]; versions: WorldSnapshot[]; events: unknown[]; chunks?: unknown[]; interactions?: unknown[]; retention?: unknown; playback?: unknown; images?:SceneAsset[]; imageJobs?:Record<string,unknown>[] }>(`/api/worlds/${worldId}/records`);
   function section(label: string, content: unknown, open = false) {
     const details = document.createElement('details'), summary = document.createElement('summary'), pre = document.createElement('pre');
     summary.textContent = label; pre.textContent = typeof content === 'string' ? content : JSON.stringify(content, null, 2); details.open = open; details.append(summary, pre); root.append(details);
   }
   section('当前世界状态', records.snapshot, true); section('提交文字与轮次', records.turns, true);
   section('世界模式与动画进度', { mode: records.snapshot.mode ?? 'animated', playback: records.playback });
+  const gallery=document.createElement('div');gallery.className='asset-grid archive-images';
+  for(const asset of records.images??[]) {
+    const card=document.createElement('figure'), img=document.createElement('img'), label=document.createElement('figcaption'), original=document.createElement('a');
+    img.src=`/api/images/${asset.hash}`;img.alt=asset.name;img.loading='lazy';label.textContent=`${asset.name} · ${asset.credit}`;
+    original.href=`/api/images/${asset.imageId}/original`;original.textContent='下载原件';original.setAttribute('download','');
+    card.append(img,label,original);gallery.append(card);
+  }
+  root.append(gallery);section('图片来源、尺寸与文件哈希',records.images??[]);
+  for(const job of records.imageJobs??[]) {
+    section('图片生成记录',job);
+    for(const field of ['request_hash','response_hash']) if(typeof job[field]==='string') {
+      const link=document.createElement('a');link.href=`/api/artifacts/${job[field]}`;link.target='_blank';link.rel='noopener';link.textContent=field==='request_hash'?'查看图片模型原始请求 ↗':'查看图片模型原始响应（含图片编码）↗';root.append(link,document.createElement('br'));
+    }
+  }
   // A current work remains inspectable after its originating turn has expired.
   if (records.snapshot.packageHash) {
     const pkg = await artifact<ScenePackage>(records.snapshot.packageHash);
@@ -72,6 +88,7 @@ async function playground() {
   let current: WorldSnapshot;
   let interactions: InteractionQueue | undefined;
   const presentation = new Presentation(renderer, host, id => interactions?.enqueue(id));
+  const textures = new Textures();
   let firstDisplay = true, presentedHash: string | null | undefined;
   let checkpointing = false;
   function draw(operations: DrawOperation[], bindings = current?.bindings ?? []) {
@@ -84,18 +101,20 @@ async function playground() {
     history.replaceState(null, '', `/w/${worldId}`);
   } else current = await api<WorldSnapshot>(`/api/worlds/${worldId}`);
   const localWorldId = worldId;
+  const art = await artPicker(localWorldId,document.querySelector<HTMLElement>('.composer-wrap')!,api);
   const mode = current.mode ?? 'animated'; root.dataset.mode = mode;
   modeLabel.textContent = mode === 'storybook' ? '静态漫画／绘本' : '动态动画';
   toolbar.querySelector<HTMLAnchorElement>(`[data-mode="${mode}"]`)?.setAttribute('aria-current', 'page');
   document.title = '就有了 · 一个小小的世界';
   async function applySnapshot(snapshot: WorldSnapshot, force = false) {
     if (interactions?.pending && !force) return;
-    let background = '#ffffff';
+    let background = '#ffffff', prepared:Awaited<ReturnType<Textures['prepare']>>|undefined, pkg:ScenePackage|undefined;
     if (snapshot.packageHash) {
-      const pkg = await loadPackage(snapshot.packageHash);
+      pkg = await loadPackage(snapshot.packageHash);
       background = JSON.parse(pkg.files['view.json']).background;
       const restored = await runIsolated(pkg, snapshot.state, snapshot.packageHash);
       if (canonical(restored.state) !== canonical(snapshot.state) || canonical(restored.operations) !== canonical(snapshot.operations) || canonical(restored.bindings ?? []) !== canonical(snapshot.bindings ?? [])) throw new Error('恢复结果与保存快照不一致');
+      prepared=await textures.prepare(pkg);
     }
     if (snapshot.revision < current.revision) return;
     if (snapshot.packageHash !== presentedHash) {
@@ -104,6 +123,7 @@ async function playground() {
       presentedHash = snapshot.packageHash;
     }
     renderer.renderer.background.color = background;
+    presentation.setTextures(prepared??new Map());textures.activate(pkg);
     current = snapshot; draw(snapshot.operations);
     toolbar.querySelector<HTMLElement>('.world-modes')!.hidden = snapshot.revision > 0;
     root.dataset.versionId = snapshot.versionId; root.dataset.worldId = snapshot.worldId; root.dataset.revision = String(snapshot.revision);
@@ -155,6 +175,7 @@ async function playground() {
     const receipt: TrialResult = { attemptId, packageHash: candidate.packageHash, baseVersionId: candidate.baseVersionId, baseRevision: candidate.baseRevision, ok: true };
     try {
       receipt.output = await runIsolated(candidate.package, candidate.baseline.state, candidate.packageHash, { migrate: true, previousProtocol: candidate.previousProtocol });
+      await textures.prepare(candidate.package);
       const restored = await runIsolated(candidate.package, receipt.output.state, candidate.packageHash);
       if (canonical(restored.state) !== canonical(receipt.output.state) || canonical(restored.operations) !== canonical(receipt.output.operations) || canonical(restored.bindings ?? []) !== canonical(receipt.output.bindings ?? [])) throw new Error('候选场景无法从快照无损恢复');
     }
@@ -171,9 +192,12 @@ async function playground() {
   let eventWork = Promise.resolve();
   const stream = new EventSource(`/api/worlds/${localWorldId}/events`);
   stream.onmessage = message => {
-    const event = JSON.parse(message.data) as { kind: string; payload: { attemptId?: string; turnId?: string; versionId?: string; error?: string } };
+    const event = JSON.parse(message.data) as { kind: string; payload: { attemptId?: string; turnId?: string; versionId?: string; error?: string; name?:string } };
     eventWork = eventWork.then(async () => {
-      if (event.kind === 'candidate.ready' && event.payload.attemptId) {
+      if (event.kind === 'image.generating') {
+        const activity=await api<{attempts:{id:string;status:string}[]}>(`/api/worlds/${localWorldId}/activity`);
+        if(activity.attempts.some(a=>a.id===event.payload.attemptId&&a.status==='generating')) status.textContent=`正在画${event.payload.name??'新图片'}…`;
+      } else if (event.kind === 'candidate.ready' && event.payload.attemptId) {
         // Replayed events can describe attempts already finalized; query current status.
         const records = await api<{ attempts: { id: string; status: string }[] }>(`/api/worlds/${localWorldId}/activity`);
         if (records.attempts.some(a => a.id === event.payload.attemptId && a.status === 'trial')) await trial(event.payload.attemptId);
@@ -206,7 +230,7 @@ async function playground() {
     const value = JSON.parse(stored);
     if (value.expiresAt && value.expiresAt <= new Date().toISOString()) { localStorage.removeItem(outboxKey); status.textContent = '之前未发送的文字已过期，可以重新写一句。'; return; }
     await interactions!.flush();
-    await api(`/api/worlds/${localWorldId}/turns`, { text: value.text, clientSubmissionId: value.clientSubmissionId });
+    await api(`/api/worlds/${localWorldId}/turns`, { text: value.text, clientSubmissionId: value.clientSubmissionId, ...(value.artSelection??{}) });
     localStorage.removeItem(outboxKey);
   }
   form.addEventListener('submit', event => {
@@ -214,7 +238,7 @@ async function playground() {
     if (composing || !input.value.trim()) return;
     if (localStorage.getItem(outboxKey)) { status.textContent = '上一句话还在发送，请稍等一下。'; return; }
     const clientSubmissionId = clientId();
-    localStorage.setItem(outboxKey, JSON.stringify({ text: input.value, clientSubmissionId, expiresAt: addCalendarMonths(new Date(), 3).toISOString() }));
+    localStorage.setItem(outboxKey, JSON.stringify({ text: input.value, clientSubmissionId, artSelection:art.selection(), expiresAt: addCalendarMonths(new Date(), 3).toISOString() }));
     status.textContent = '收到啦，等一下…'; input.value = ''; send.disabled = true; retry.hidden = true;
     void flushSubmission().catch(() => { status.textContent = '这句话已经记住，连上后会继续发送。'; });
   });

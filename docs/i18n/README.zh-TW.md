@@ -9,6 +9,7 @@
 - 從空白畫布開始，用一句話讓球出現。
 - 透過 DeepSeek 描述和修改世界，加入滑鼠點擊或觸控互動。
 - 選擇持續活動的動態世界，或靜態漫畫／繪本頁面。
+- 使用 Seedream 產生圖片，選擇免費素材，或上傳小朋友自己的畫作。
 - 在同一張畫布上繼續創作，透過儲存的連結回到作品。
 
 應用程式介面目前為簡體中文。
@@ -16,6 +17,8 @@
 ## 體驗範例
 
 目前沒有公開託管的展示網站。自行部署後，傳送 **「有一个球」** 即可體驗。內建範例不需要模型金鑰，請使用這句原樣的簡體中文。
+
+若要在沒有模型金鑰時體驗圖片，先在 **素材／我的作品** 中選圖，再傳送 **「使用选中的素材」**。
 
 ![內建範例：畫布上出現一個球](../../docs/media/ball.png)
 
@@ -56,10 +59,13 @@ npm start
 | `DATA_DIR` | 作品與記錄的儲存目錄，預設為 `./data`。 |
 | `GENERATOR_MODE` | `fixture` 使用內建範例；`deepseek` 啟用自由創作。 |
 | `DEEPSEEK_API_KEY / DEEPSEEK_MODEL / DEEPSEEK_BASE_URL` | DeepSeek 金鑰、模型與 API 位址。 |
+| `SEEDREAM_API_KEY / SEEDREAM_MODEL / SEEDREAM_BASE_URL / SEEDREAM_SIZE` | Seedream 金鑰、模型、API 位址與圖片尺寸。 |
 
 ### AI 服務
 
 設定 `GENERATOR_MODE=deepseek` 並填入 `DEEPSEEK_API_KEY` 即可啟用 DeepSeek，其他連線參數請參閱 `.env.example`。
+
+DeepSeek 編排場景與互動，Seedream 為 AI 繪圖產生圖片。免費素材和上傳本身不會呼叫圖片模型；DeepSeek 模式下編排場景仍會使用文字模型。
 
 實際模型請求可能產生供應商費用。重新開啟既有作品不需要再次產生內容。
 
@@ -72,4 +78,4 @@ npm start
 
 ## 授權
 
-程式碼採用 [MIT](../../LICENSE) 授權。
+程式碼採用 [MIT](../../LICENSE) 授權。 內建圖片採用 [Kenney CC0 素材](../../fixtures/library/README.md)。上傳和產生的作品不包含在程式碼授權內。

@@ -1,12 +1,13 @@
 import { test, expect, type Browser } from '@playwright/test';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:http';
-import { modelReply, streamReply, animatedReply } from '../helpers/interactive';
+import { modelReply, streamReply, animatedReply, withImageWorkflow } from '../helpers/interactive';
 import { Store } from '../../apps/server/src/store';
 import { addCalendarMonths } from '@and-there-was/scene';
+import { imageReply } from '../helpers/images';
 
 let server: ChildProcess, dataDirectory: string, serverLog = '';
 let modelEnvironment: Record<string, string> = {};
@@ -146,7 +147,7 @@ test('storybook selection produces a still illustrated page and survives fresh-b
 });
 
 test('tapping a composed character restarts its motion and restores the saved cue',async({page,browser,request},info)=>{
-  const model=createServer(async(req,res)=>{for await(const _ of req){} res.setHeader('Content-Type','text/event-stream');res.end(streamReply(await animatedReply()));});
+  const model=createServer(async(req,res)=>{for await(const _ of req){} res.setHeader('Content-Type','text/event-stream');res.end(streamReply(withImageWorkflow(await animatedReply())));});
   await new Promise<void>(resolve=>model.listen(0,'127.0.0.1',resolve));
   const address=model.address() as {port:number}; await stop();
   modelEnvironment={GENERATOR_MODE:'deepseek',DEEPSEEK_API_KEY:'test-key',DEEPSEEK_BASE_URL:`http://127.0.0.1:${address.port}`}; await start();
@@ -240,7 +241,7 @@ test('DeepSeek transport, offline taps, lost acknowledgement, restart and protoc
     const body = JSON.parse(Buffer.concat(chunks).toString()), input = JSON.parse(body.messages[1].content); calls.push(input);
     res.writeHead(200, { 'Content-Type': 'text/event-stream' });
     if (input.request === 'bad upgrade' && !failureSent) { failureSent = true; res.end(streamReply('{malformed')); }
-    else res.end(streamReply(await modelReply(input.request.includes('upgrade'), input.snapshot.mode)));
+    else res.end(streamReply(withImageWorkflow(await modelReply(input.request.includes('upgrade'), input.snapshot.mode))));
   });
   await new Promise<void>(resolve => model.listen(0, '127.0.0.1', resolve));
   const address = model.address(); if (!address || typeof address === 'string') throw new Error('No model test port');
@@ -300,4 +301,67 @@ test('DeepSeek transport, offline taps, lost acknowledgement, restart and protoc
     await context.setOffline(false); await stop(); modelEnvironment = {}; await start();
     model.closeAllConnections(); await new Promise<void>(resolve => model.close(() => resolve()));
   }
+});
+
+test('free artwork animates; a corrupted candidate image keeps the saved scene until retry',async({page,request},info)=>{
+  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto('/');await expect(page.locator('#app')).toHaveAttribute('data-revision','0');
+  const id=page.url().split('/').at(-1)!;
+  await page.locator('#art-trigger').click();await page.getByRole('checkbox',{name:'小兔贴纸',exact:true}).check();await page.getByRole('button',{name:'完成素材选择'}).click();
+  await page.locator('#thought').fill('使用选中的素材');await page.getByRole('button',{name:'发送',exact:true}).click();
+  await expect(page.locator('#app')).toHaveAttribute('data-revision','1');
+  const first=await page.locator('canvas').screenshot();await expect.poll(async()=>Buffer.compare(first,await page.locator('canvas').screenshot())).not.toBe(0);
+  const before=await(await request.get(`/api/worlds/${id}/records`)).json();expect(before.snapshot.operations[0].kind).toBe('sprite');expect(before.imageJobs).toHaveLength(0);
+  const owl=before.images.find((a:{id:string})=>a.id==='free_owl');
+  await page.locator('#art-trigger').click();await page.getByRole('checkbox',{name:'小兔贴纸',exact:true}).uncheck();await page.getByRole('checkbox',{name:'猫头鹰贴纸',exact:true}).check();await page.getByRole('button',{name:'完成素材选择'}).click();
+  let corrupt=true;await page.route(`**/api/images/${owl.hash}`,async route=>{if(corrupt&&route.request().resourceType()==='fetch'){corrupt=false;await route.fulfill({status:200,body:'corrupted',contentType:'image/png'});}else await route.continue();});
+  await page.locator('#thought').fill('使用选中的素材');await page.getByRole('button',{name:'发送',exact:true}).click();
+  await expect(page.getByRole('button',{name:'再试一次'})).toBeVisible();
+  expect((await(await request.get(`/api/worlds/${id}`)).json()).versionId).toBe(before.snapshot.versionId);
+  expect((await(await request.get(`/api/worlds/${id}/records`)).json()).attempts.at(-1).error).toContain('素材哈希');
+  await page.getByRole('button',{name:'再试一次'}).click();await expect(page.locator('#app')).toHaveAttribute('data-revision','2');
+  expect((await(await request.get(`/api/worlds/${id}`)).json()).operations[0].asset).toBe('free_owl');
+  await page.screenshot({path:info.outputPath('library-animated.png')});expect(errors).toEqual([]);
+});
+
+test('upload stays intact on a still page and restores identical pixels/files in a fresh browser',async({page,browser,request},info)=>{
+  await page.goto('/?mode=storybook');await expect(page.locator('#app')).toHaveAttribute('data-revision','0');
+  const url=page.url(),id=url.split('/').at(-1)!;
+  await page.locator('#art-trigger').click();await page.locator('.upload-form input[type=file]').setInputFiles('fixtures/library/rabbit.png');
+  await page.getByRole('textbox',{name:'作品名字'}).fill('上传验收图');await page.getByRole('button',{name:'上传作品',exact:true}).click();
+  await expect(page.locator('.art-feedback')).toContainText('作品已保存');await page.getByRole('button',{name:'完成素材选择'}).click();
+  await page.locator('#thought').fill('使用选中的素材');await page.getByRole('button',{name:'发送',exact:true}).click();await expect(page.locator('#app')).toHaveAttribute('data-revision','1');
+  const before=await(await request.get(`/api/worlds/${id}/records`)).json(),upload=before.images.find((a:{source:string})=>a.source==='upload');
+  await expect((await request.get(`/api/images/${upload.imageId}/original`)).body()).resolves.toEqual(readFileSync('fixtures/library/rabbit.png'));
+  const still=await page.locator('canvas').screenshot();await page.screenshot({path:info.outputPath('uploaded-storybook.png')});await page.close();await stop();await start();
+  const context=await freshContext(browser,info.project.use),restored=await context.newPage();await restored.goto(url);
+  await expect(restored.locator('#app')).toHaveAttribute('data-version-id',before.snapshot.versionId);expect(await restored.locator('canvas').screenshot()).toEqual(still);
+  const after=await(await request.get(`/api/worlds/${id}/records`)).json();expect(after.snapshot).toEqual(before.snapshot);expect(after.images).toEqual(before.images);expect(after.turns).toHaveLength(1);expect(after.imageJobs).toHaveLength(0);
+  await restored.goto(`/inspect/${id}`);await expect(restored.getByRole('img',{name:'上传验收图'})).toBeVisible();await context.close();
+});
+
+test('Seedream HTTP transport, image decoding, interactive sprites, failure rollback and retry',async({page,request},info)=>{
+  let imageCalls=0;
+  const model=createServer(async(req,res)=>{
+    const chunks:Buffer[]=[];for await(const chunk of req)chunks.push(chunk);const body=JSON.parse(Buffer.concat(chunks).toString());
+    if(req.url?.endsWith('/images/generations')) {
+      imageCalls++;expect(req.headers.authorization).toBe('Bearer image-test-key');expect(body.response_format).toBe('b64_json');expect(body.background).toBe('transparent');
+      res.setHeader('Content-Type','application/json');res.end(JSON.stringify({data:[{b64_json:imageCalls===2?Buffer.from('broken png').toString('base64'):readFileSync('fixtures/library/rabbit.png').toString('base64')}]}));
+    } else {const input=JSON.parse(body.messages[1].content),alias=input.snapshot.revision?'next_art':'new_art';res.setHeader('Content-Type','text/event-stream');res.end(streamReply(imageReply('animated',[alias],[{id:alias,name:'绘制的小兔',role:'character',prompt:'a rabbit'}])));}
+  });
+  await new Promise<void>(r=>model.listen(0,'127.0.0.1',r));const address=model.address() as {port:number};await stop();
+  modelEnvironment={GENERATOR_MODE:'deepseek',DEEPSEEK_API_KEY:'text-test-key',DEEPSEEK_BASE_URL:`http://127.0.0.1:${address.port}`,SEEDREAM_API_KEY:'image-test-key',SEEDREAM_BASE_URL:`http://127.0.0.1:${address.port}`};await start();
+  try {
+    const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+    await page.goto('/');await expect(page.locator('#app')).toHaveAttribute('data-revision','0');await expect(page.locator('#art-trigger')).toContainText('AI 画图');
+    const id=page.url().split('/').at(-1)!;await page.locator('#thought').fill('画小兔');await page.getByRole('button',{name:'发送',exact:true}).click();await expect(page.locator('#app')).toHaveAttribute('data-revision','1');
+    const box=(await page.locator('canvas').boundingBox())!;if(info.project.use.hasTouch)await page.touchscreen.tap(box.x+box.width/2,box.y+box.height/2);else await page.mouse.click(box.x+box.width/2,box.y+box.height/2);
+    await expect(page.locator('#app')).toHaveAttribute('data-revision','2');
+    const before=await(await request.get(`/api/worlds/${id}`)).json();expect(before.state.taps).toBe(1);
+    await page.locator('#thought').fill('换一张图片');await page.getByRole('button',{name:'发送',exact:true}).click();await expect(page.getByRole('button',{name:'再试一次'})).toBeVisible();
+    expect((await(await request.get(`/api/worlds/${id}`)).json()).versionId).toBe(before.versionId);
+    await page.getByRole('button',{name:'再试一次'}).click();await expect(page.locator('#app')).toHaveAttribute('data-revision','3');
+    expect(imageCalls).toBe(3);const records=await(await request.get(`/api/worlds/${id}/records`)).json();expect(records.imageJobs.map((j:{status:string})=>j.status)).toEqual(['completed','failed','completed']);
+    await page.screenshot({path:info.outputPath('generated-sprite.png')});expect(errors).toEqual([]);
+  } finally {await stop();modelEnvironment={};await start();model.closeAllConnections();await new Promise<void>(r=>model.close(()=>r()));}
 });

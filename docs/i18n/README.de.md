@@ -9,6 +9,7 @@ Aus einem Gedanken wird eine kleine Welt. Eine Leinwand für Kinder und die Erwa
 - Beginne mit einer leeren Leinwand und lass mit einem Satz einen Ball erscheinen.
 - Beschreibe und verändere mit DeepSeek eine Welt und füge Interaktionen per Klick oder Berührung hinzu.
 - Wähle eine animierte Welt oder eine unbewegte Comic- oder Bilderbuchseite.
+- Erzeuge Bilder mit Seedream, wähle kostenlose Vorlagen oder lade eine eigene Kinderzeichnung hoch.
 - Gestalte auf derselben Leinwand weiter und kehre über den gespeicherten Link zu deinem Werk zurück.
 
 Die Benutzeroberfläche ist derzeit auf vereinfachtem Chinesisch verfügbar.
@@ -16,6 +17,8 @@ Die Benutzeroberfläche ist derzeit auf vereinfachtem Chinesisch verfügbar.
 ## Demo ausprobieren
 
 Es gibt noch keine öffentlich gehostete Demo. Starte die Anwendung lokal und sende **「有一个球」** („Da ist ein Ball“). Das integrierte Beispiel benötigt keine Modell-Zugangsdaten und erkennt genau diesen chinesischen Satz.
+
+Um Bilder ohne Modellschlüssel auszuprobieren, wähle unter **素材／我的作品** Bilder aus und sende **「使用选中的素材」** („Ausgewählte Vorlagen verwenden“).
 
 ![Integriertes Beispiel: ein Ball auf der Leinwand](../../docs/media/ball.png)
 
@@ -56,10 +59,13 @@ Trage die Werte in `.env` ein und starte den Dienst nach Änderungen neu. API-Sc
 | `DATA_DIR` | Ordner für Werke und Aufzeichnungen; Standard: `./data`. |
 | `GENERATOR_MODE` | `fixture` für das integrierte Beispiel, `deepseek` für freies Gestalten. |
 | `DEEPSEEK_API_KEY / DEEPSEEK_MODEL / DEEPSEEK_BASE_URL` | API-Schlüssel, Modell und Endpunkt von DeepSeek. |
+| `SEEDREAM_API_KEY / SEEDREAM_MODEL / SEEDREAM_BASE_URL / SEEDREAM_SIZE` | API-Schlüssel, Modell, Endpunkt und Bildgröße von Seedream. |
 
 ### KI-Dienste
 
 Aktiviere DeepSeek mit `GENERATOR_MODE=deepseek` und `DEEPSEEK_API_KEY`. Weitere Verbindungseinstellungen stehen in `.env.example`.
+
+DeepSeek gestaltet die Szene und ihre Interaktionen. Seedream zeichnet die KI-Bilder. Kostenlose Vorlagen und Uploads rufen das Bildmodell nicht auf; das Erstellen einer Szene im DeepSeek-Modus verwendet weiterhin das Textmodell.
 
 Echte Modellanfragen können Kosten beim Anbieter verursachen. Gespeicherte Werke lassen sich ohne erneute Generierung öffnen.
 
@@ -72,4 +78,4 @@ Die Anwendung ist privat und für einen einzelnen Betreiber gedacht; eine Kontov
 
 ## Lizenz
 
-Code: [MIT](../../LICENSE).
+Code: [MIT](../../LICENSE). Enthaltene Bilder: [CC0-Vorlagen von Kenney](../../fixtures/library/README.md). Hochgeladene und generierte Werke sind nicht Teil der Code-Lizenz.

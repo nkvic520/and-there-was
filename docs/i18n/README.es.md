@@ -9,6 +9,7 @@ Una idea se convierte en un pequeño mundo. Un lienzo para niños y para los adu
 - Empieza con un lienzo vacío y haz aparecer una pelota con una frase.
 - Describe y modifica un mundo con DeepSeek, y añade interacciones con clics o toques.
 - Elige un mundo animado o una página estática de cómic o cuento ilustrado.
+- Crea imágenes con Seedream, elige recursos gratuitos o sube un dibujo del niño.
 - Sigue creando en el mismo lienzo y vuelve a tu obra mediante su enlace guardado.
 
 La interfaz de la aplicación está actualmente en chino simplificado.
@@ -16,6 +17,8 @@ La interfaz de la aplicación está actualmente en chino simplificado.
 ## Probar la demo
 
 Todavía no hay una demo pública alojada. Ejecuta la aplicación localmente y envía **「有一个球」** (“Hay una pelota”). El ejemplo integrado no necesita credenciales de modelos y reconoce esta frase exacta en chino.
+
+Para probar imágenes sin una clave de modelo, elige imágenes en **素材／我的作品** y envía **「使用选中的素材」** (“Usar los recursos seleccionados”).
 
 ![Ejemplo integrado: una pelota en el lienzo](../../docs/media/ball.png)
 
@@ -56,10 +59,13 @@ Configura los valores en `.env` y reinicia el servicio tras los cambios. Guarda 
 | `DATA_DIR` | Carpeta de obras y registros; valor predeterminado: `./data`. |
 | `GENERATOR_MODE` | `fixture` para el ejemplo integrado; `deepseek` para la creación libre. |
 | `DEEPSEEK_API_KEY / DEEPSEEK_MODEL / DEEPSEEK_BASE_URL` | Clave de API, modelo y dirección de DeepSeek. |
+| `SEEDREAM_API_KEY / SEEDREAM_MODEL / SEEDREAM_BASE_URL / SEEDREAM_SIZE` | Clave de API, modelo, dirección y tamaño de imagen de Seedream. |
 
 ### Servicios de IA
 
 Activa DeepSeek con `GENERATOR_MODE=deepseek` y `DEEPSEEK_API_KEY`. El resto de opciones de conexión está en `.env.example`.
+
+DeepSeek organiza la escena y las interacciones. Seedream dibuja las imágenes generadas por IA. Los recursos gratuitos y las subidas no llaman al modelo de imágenes; crear escenas en modo DeepSeek sigue utilizando el modelo de texto.
 
 Las peticiones reales a los modelos pueden generar cargos del proveedor. Las obras guardadas se pueden volver a abrir sin regenerarlas.
 
@@ -72,4 +78,4 @@ Es una aplicación privada para un único propietario, sin cuentas integradas. P
 
 ## Licencia
 
-Código: [MIT](../../LICENSE).
+Código: [MIT](../../LICENSE). Imágenes incluidas: [recursos CC0 de Kenney](../../fixtures/library/README.md). Las obras subidas o generadas no están incluidas en la licencia del código.
