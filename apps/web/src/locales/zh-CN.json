@@ -1,4 +1,8 @@
 {
+  "worldMenu": "世界菜单",
+  "history": "历史记录",
+  "keepWriting": "继续说",
+  "hideComposer": "收起输入框",
   "language": "语言",
   "brand": "就有了",
   "description": "写一句话，创造一个小世界。",

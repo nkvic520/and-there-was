@@ -1,4 +1,8 @@
 {
+  "worldMenu": "Меню мира",
+  "history": "История мира",
+  "keepWriting": "Продолжить рассказ",
+  "hideComposer": "Свернуть поле ввода",
   "language": "Язык",
   "brand": "And There Was…",
   "description": "Создай маленький мир одной фразой.",

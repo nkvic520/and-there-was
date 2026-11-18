@@ -82,25 +82,69 @@ async function inspect(worldId: string) {
 }
 
 async function playground() {
-  root.innerHTML = `<section class="playground" data-i18n-aria="canvas"><div id="canvas"></div>
-    <div class="composer-wrap"><p id="status" role="status" aria-live="polite"></p>
-    <form id="composer"><label class="sr-only" for="thought" data-i18n="thought"></label>
-    <input id="thought" name="thought" data-i18n-placeholder="thought" autocomplete="off" maxlength="2000" enterkeyhint="done">
-    <button id="send" type="submit" data-i18n-aria="send" disabled><span aria-hidden="true">↑</span></button></form>
-    <button id="retry" class="text-button" data-i18n="retry" hidden></button></div></section>`;
-  const toolbar = document.createElement('header'); toolbar.className = 'world-toolbar';
-  toolbar.innerHTML = `<a class="wordmark" href="/" data-i18n="brand" data-i18n-aria="newWorld"></a>
-    <nav class="world-modes" data-i18n-aria="modes"><a href="/?mode=animated" data-mode="animated">▷ <span data-i18n="animated"></span></a>
-    <a href="/?mode=storybook" data-mode="storybook">▤ <span data-i18n="storybook"></span></a></nav>
-    <div class="world-actions"><span id="mode-label"></span><button id="pause" type="button" hidden></button>
-    <a href="/" id="new-world" data-i18n-aria="newWorld"><span data-i18n="newWorld"></span> ＋</a></div>`;
-  toolbar.querySelector('.world-actions')!.append(languagePicker());
-  root.querySelector('.playground')!.prepend(toolbar);
+  root.className = 'world-page';
+  root.innerHTML = `<section class="playground" data-i18n-aria="canvas">
+    <div id="canvas"></div>
+    <button id="menu-toggle" type="button" popovertarget="world-menu" aria-controls="world-menu" data-i18n-aria="worldMenu">
+      <span class="menu-icon" aria-hidden="true"></span></button>
+    <nav id="world-menu" popover data-i18n-aria="worldMenu">
+      <header><strong data-i18n="brand"></strong><span id="mode-label"></span></header>
+      <a id="new-world" href="/"><span aria-hidden="true">＋</span><span data-i18n="newWorld"></span></a>
+      <a id="world-history"><span aria-hidden="true">↺</span><span data-i18n="history"></span></a>
+      <button id="pause" type="button" hidden></button>
+      <div class="menu-language"><span data-i18n="language"></span></div>
+    </nav>
+    <div class="composer-wrap">
+      <p id="status" role="status" aria-live="polite"></p>
+      <button id="retry" type="button" class="text-button" data-i18n="retry" hidden></button>
+      <button id="continue" class="continue-button" type="button" aria-controls="writing-panel" hidden>
+        <span class="speech-icon" aria-hidden="true"></span><span data-i18n="keepWriting"></span></button>
+      <div id="writing-panel" hidden>
+        <form id="composer"><label class="sr-only" for="thought" data-i18n="thought"></label>
+          <input id="thought" name="thought" data-i18n-placeholder="thought" autocomplete="off" maxlength="2000" enterkeyhint="done">
+          <button id="send" type="submit" data-i18n-aria="send" disabled><span aria-hidden="true">↑</span></button></form>
+        <div class="composer-tools">
+          <nav class="world-modes" data-i18n-aria="modes">
+            <a href="/?mode=animated" data-mode="animated" data-i18n="animated"></a>
+            <a href="/?mode=storybook" data-mode="storybook" data-i18n="storybook"></a>
+          </nav>
+          <button id="fold" type="button" data-i18n-aria="hideComposer" hidden><span aria-hidden="true">⌄</span></button>
+        </div>
+      </div>
+    </div></section>`;
+  const menu = root.querySelector<HTMLElement>('#world-menu')!;
+  menu.querySelector('.menu-language')!.append(languagePicker());
   localize(root);
+  const panel = root.querySelector<HTMLElement>('#writing-panel')!, resume = root.querySelector<HTMLButtonElement>('#continue')!;
+  const fold = root.querySelector<HTMLButtonElement>('#fold')!, modes = root.querySelector<HTMLElement>('.world-modes')!;
   const pause = document.querySelector<HTMLButtonElement>('#pause')!, modeLabel = document.querySelector<HTMLElement>('#mode-label')!;
   const input = document.querySelector<HTMLInputElement>('#thought')!, send = document.querySelector<HTMLButtonElement>('#send')!, form = document.querySelector<HTMLFormElement>('#composer')!;
   const status = document.querySelector<HTMLElement>('#status')!, retry = document.querySelector<HTMLButtonElement>('#retry')!, host = document.querySelector<HTMLElement>('#canvas')!;
   let composing = false, failedTurn: string | undefined, worldId = location.pathname.match(/^\/w\/([\w-]+)$/)?.[1];
+  function writing(open: boolean) {
+    const hadFocus = panel.contains(document.activeElement);
+    panel.hidden = !open;
+    resume.hidden = open;
+    resume.setAttribute('aria-expanded', String(open));
+    if (!open && hadFocus) resume.focus({ preventScroll: true });
+  }
+  resume.onclick = () => { writing(true); input.focus({ preventScroll: true }); };
+  fold.onclick = () => { writing(false); resume.focus({ preventScroll: true }); };
+  panel.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !event.isComposing && !composing && !fold.hidden) {
+      event.preventDefault(); fold.click();
+    }
+  });
+  // Some mobile browsers resize only the visual viewport when the keyboard opens.
+  const viewport = window.visualViewport;
+  const dock = root.querySelector<HTMLElement>('.composer-wrap')!;
+  function placeDock() {
+    const bottom = viewport?.scale === 1 ? Math.max(0, document.documentElement.clientHeight - viewport.height - viewport.offsetTop) : 0;
+    dock.style.setProperty('--keyboard-inset', bottom + 'px');
+  }
+  viewport?.addEventListener('resize', placeDock);
+  viewport?.addEventListener('scroll', placeDock);
+  placeDock();
   const renderer = new Application();
   await renderer.init({ resizeTo: host, background: '#ffffff', antialias: true, autoDensity: true, resolution: Math.min(devicePixelRatio, 2), preference: 'webgl' });
   host.append(renderer.canvas); renderer.canvas.dataset.i18nAria = 'canvas'; renderer.canvas.setAttribute('aria-label', translate('canvas'));
@@ -120,17 +164,20 @@ async function playground() {
     history.replaceState(null, '', `/w/${worldId}`);
   } else current = await api<WorldSnapshot>(`/api/worlds/${worldId}`);
   const localWorldId = worldId;
-  const art = await artPicker(localWorldId,document.querySelector<HTMLElement>('.composer-wrap')!,api);
+  menu.querySelector<HTMLAnchorElement>('#world-history')!.href = `/inspect/${localWorldId}`;
+  const art = await artPicker(localWorldId,root.querySelector<HTMLElement>('.composer-tools')!,api);
   const mode = current.mode ?? 'animated'; root.dataset.mode = mode;
   label(modeLabel, mode);
   if (art.fixture) { input.dataset.i18nPlaceholder = 'sampleHint'; input.placeholder = translate('sampleHint'); }
-  toolbar.querySelector<HTMLAnchorElement>(`[data-mode="${mode}"]`)?.setAttribute('aria-current', 'page');
-  async function applySnapshot(snapshot: WorldSnapshot, force = false) {
+  const selectedMode = modes.querySelector<HTMLAnchorElement>(`[data-mode="${mode}"]`)!;
+  selectedMode.setAttribute('aria-current', 'page');
+  selectedMode.onclick = event => event.preventDefault();
+  async function applySnapshot(snapshot: WorldSnapshot, force = false, committedTurn = false) {
     if (interactions?.pending && !force) return;
-    let background = '#ffffff', prepared:Awaited<ReturnType<Textures['prepare']>>|undefined, pkg:ScenePackage|undefined;
+    let view = { background: '#ffffff', layout: '' }, prepared:Awaited<ReturnType<Textures['prepare']>>|undefined, pkg:ScenePackage|undefined;
     if (snapshot.packageHash) {
       pkg = await loadPackage(snapshot.packageHash);
-      background = JSON.parse(pkg.files['view.json']).background;
+      view = JSON.parse(pkg.files['view.json']);
       const restored = await runIsolated(pkg, snapshot.state, snapshot.packageHash);
       if (canonical(restored.state) !== canonical(snapshot.state) || canonical(restored.operations) !== canonical(snapshot.operations) || canonical(restored.bindings ?? []) !== canonical(snapshot.bindings ?? [])) throw new Error('恢复结果与保存快照不一致');
       prepared=await textures.prepare(pkg);
@@ -141,10 +188,13 @@ async function playground() {
       presentation.restore(saved.packageHash === snapshot.packageHash ? saved.elapsedMs : 0, saved.paused,saved.packageHash === snapshot.packageHash ? saved.cues : {});
       presentedHash = snapshot.packageHash;
     }
-    renderer.renderer.background.color = background;
-    presentation.setTextures(prepared??new Map());textures.activate(pkg);
+    renderer.renderer.background.color = view.background;
+    presentation.setArtwork(prepared ?? new Map(), pkg?.assets ?? [], view.layout === 'viewport'); textures.activate(pkg);
+    const newWork = firstDisplay || committedTurn || snapshot.packageHash !== current.packageHash;
+    modes.hidden = !!snapshot.packageHash;
+    fold.hidden = !snapshot.packageHash;
+    if (newWork && !input.value && !composing) writing(!snapshot.packageHash);
     current = snapshot; draw(snapshot.operations);
-    toolbar.querySelector<HTMLElement>('.world-modes')!.hidden = snapshot.revision > 0;
     root.dataset.versionId = snapshot.versionId; root.dataset.worldId = snapshot.worldId; root.dataset.revision = String(snapshot.revision);
     void checkpoint().catch(() => {});
   }
@@ -158,7 +208,7 @@ async function playground() {
     }
     finally { checkpointing=false; }
   }
-  pause.onclick = () => { presentation.pause(!presentation.paused); label(pause, presentation.paused ? 'play' : 'pause'); void checkpoint().catch(() => {}); };
+  pause.onclick = () => { presentation.pause(!presentation.paused); label(pause, presentation.paused ? 'play' : 'pause'); menu.hidePopover(); void checkpoint().catch(() => {}); };
   const clockTimer = setInterval(() => { void checkpoint().catch(() => {}); }, 2000);
   document.addEventListener('visibilitychange', () => { if(document.hidden) void checkpoint(true).catch(() => {}); });
   window.addEventListener('pagehide', () => { clearInterval(clockTimer); void checkpoint(true).catch(() => {}); }, {once:true});
@@ -222,7 +272,7 @@ async function playground() {
         if (records.attempts.some(a => a.id === event.payload.attemptId && a.status === 'trial')) await trial(event.payload.attemptId);
       } else if (event.kind === 'version.committed' || event.kind === 'interaction.committed') {
         const snapshot = await api<WorldSnapshot>(`/api/worlds/${localWorldId}`);
-        if (snapshot.versionId !== current.versionId) await applySnapshot(snapshot);
+        if (snapshot.versionId !== current.versionId) await applySnapshot(snapshot, false, event.kind === 'version.committed');
         // Playing the existing scene must not dismiss a failed generation's retry.
         if (event.kind === 'version.committed') { clearLabel(status); failedTurn = undefined; retry.hidden = true; }
       } else if (event.kind === 'attempt.failed') {
@@ -258,7 +308,8 @@ async function playground() {
     if (composing || !input.value.trim()) return;
     if (localStorage.getItem(outboxKey)) { label(status, 'sending'); return; }
     const clientSubmissionId = clientId();
-    localStorage.setItem(outboxKey, JSON.stringify({ text: input.value, clientSubmissionId, uiLocale: uiLocale(), artSelection:art.selection(), expiresAt: addCalendarMonths(new Date(), 3).toISOString() }));
+    const artSelection = { ...art.selection(), viewport: { width: host.clientWidth, height: host.clientHeight } };
+    localStorage.setItem(outboxKey, JSON.stringify({ text: input.value, clientSubmissionId, uiLocale: uiLocale(), artSelection, expiresAt: addCalendarMonths(new Date(), 3).toISOString() }));
     art.submitted();
     label(status, 'received'); input.value = ''; send.disabled = true; retry.hidden = true;
     void flushSubmission().catch(() => { label(status, 'offline'); });

@@ -1,4 +1,8 @@
 {
+  "worldMenu": "Weltmenü",
+  "history": "Verlauf der Welt",
+  "keepWriting": "Weiterschreiben",
+  "hideComposer": "Eingabefeld einklappen",
   "language": "Sprache",
   "brand": "And There Was…",
   "description": "Erschaffe mit einem Satz eine kleine Welt.",

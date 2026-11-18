@@ -1,4 +1,8 @@
 {
+  "worldMenu": "World menu",
+  "history": "World history",
+  "keepWriting": "Keep creating",
+  "hideComposer": "Hide writing box",
   "language": "Language",
   "brand": "And There Was…",
   "description": "Make a little world with a sentence.",

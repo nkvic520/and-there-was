@@ -1,4 +1,8 @@
 {
+  "worldMenu": "Menu do mundo",
+  "history": "Histórico do mundo",
+  "keepWriting": "Continuar criando",
+  "hideComposer": "Recolher a caixa de texto",
   "language": "Idioma",
   "brand": "And There Was…",
   "description": "Crie um pequeno mundo com uma frase.",

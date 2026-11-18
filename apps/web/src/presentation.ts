@@ -1,7 +1,7 @@
 import { Application, Container, Graphics, Text, FillGradient, Rectangle, Circle, Sprite, Texture } from 'pixi.js';
-import { canonical, sampleMotion, type DrawOperation, type EventBinding, type WorldMode, type MotionCues } from '@and-there-was/scene';
+import { canonical, sampleMotion, type DrawOperation, type EventBinding, type WorldMode, type MotionCues, type SceneAsset } from '@and-there-was/scene';
 
-interface Visual { container: Container; body: Container; op: DrawOperation; geometry: string; gradients: FillGradient[]; born: number; retiring?: number; from?: { x:number;y:number;rotation:number;at:number } }
+interface Visual { container: Container; body: Container; op: DrawOperation; geometry: string; gradients: FillGradient[]; born: number; retiring?: number; from?: { x:number;y:number;rotation:number;at:number }; fit?: { x?:number; y?:number; scaleX:number; scaleY:number } }
 export class Presentation {
   private root = new Container();
   private nodes = new Map<string, Visual>();
@@ -13,7 +13,15 @@ export class Presentation {
   private lastStamp = 0;
   private cues: MotionCues = {};
   private textures = new Map<string,Texture>();
-  setTextures(textures:Map<string,Texture>) { this.textures=textures; }
+  private backgrounds = new Set<string>();
+  private responsive = false;
+  private spanX = 1000;
+  private spanY = 1000;
+  setArtwork(textures: Map<string, Texture>, assets: SceneAsset[], responsive: boolean) {
+    this.textures = textures;
+    this.backgrounds = new Set(assets.filter(asset => asset.role === 'background' && asset.source !== 'upload').map(asset => asset.id));
+    this.responsive = responsive;
+  }
   constructor(private app: Application, private host: HTMLElement, private tap: (id: string) => void) {
     app.stage.addChild(this.root); app.ticker.maxFPS = 60;
     app.ticker.add(ticker => {
@@ -112,24 +120,67 @@ export class Presentation {
     node.body.addChild(graphic);
   }
   private resize() {
-    const width=this.host.clientWidth,height=this.host.clientHeight;
-    if(this.mode === 'storybook' && this.nodes.size) {
-      // A book fits the whole illustration, including strokes and captions near its edges.
-      this.frame();
-      const bounds=this.root.getLocalBounds(), scale=Math.min(width/Math.max(1000,bounds.width),height/Math.max(1000,bounds.height))*.96;
-      this.root.scale.set(scale);this.root.position.set(width/2-(bounds.x+bounds.width/2)*scale,height/2-(bounds.y+bounds.height/2)*scale);
-    } else {
-      const size=Math.min(width,height);this.root.scale.set(size/1000);this.root.position.set((width-size)/2,(height-size)/2);
+    const width = this.host.clientWidth, height = this.host.clientHeight;
+    if (!width || !height) return;
+    if (this.app.screen.width !== width || this.app.screen.height !== height) this.app.renderer.resize(width, height);
+    let scale = Math.min(width, height) / 1000;
+    this.root.position.set((width - 1000 * scale) / 2, (height - 1000 * scale) / 2);
+    this.spanX = this.spanY = 1000;
+    for (const node of this.nodes.values()) node.fit = undefined;
+    if (this.mode === 'storybook' && this.nodes.size) {
+      // Measure the authored page before extending any decorative paper or scenery.
+      this.frame(false);
+      const bounds = this.root.getLocalBounds(), style = getComputedStyle(this.host);
+      const left = parseFloat(style.paddingLeft), top = parseFloat(style.paddingTop);
+      const pageWidth = Math.max(1, width - left - parseFloat(style.paddingRight));
+      const pageHeight = Math.max(1, height - top - parseFloat(style.paddingBottom));
+      scale = Math.min(pageWidth / Math.max(1000, bounds.width), pageHeight / Math.max(1000, bounds.height));
+      this.root.position.set(left + pageWidth / 2 - (bounds.x + bounds.width / 2) * scale,
+        top + pageHeight / 2 - (bounds.y + bounds.height / 2) * scale);
+    } else if (this.responsive) {
+      this.spanX = width / scale;
+      this.spanY = height / scale;
     }
+    this.root.scale.set(scale);
+    this.fitScenery(width / scale, height / scale);
     this.frame();
   }
-  private frame() {
+  private fitScenery(width: number, height: number) {
+    const centerX = width / 2 - this.root.x / this.root.scale.x;
+    const centerY = height / 2 - this.root.y / this.root.scale.y;
+    for (const node of this.nodes.values()) {
+      const op = node.op;
+      if (op.parent || op.rotation) continue;
+      const spansWidth = op.x - op.radiusX <= .005 && op.x + op.radiusX >= .995;
+      const spansHeight = op.y - op.radiusY <= .005 && op.y + op.radiusY >= .995;
+      if (op.kind === 'sprite' && op.asset && this.backgrounds.has(op.asset) && spansWidth && spansHeight) {
+        const sprite = node.body.children[0] as Sprite;
+        const cover = Math.max(width / sprite.width, height / sprite.height);
+        node.fit = { x:centerX, y:centerY, scaleX:cover, scaleY:cover };
+        continue;
+      }
+      // Whole sheets of paper and edge-spanning scenery can extend. Framed panels and character parts retain their shape.
+      const scenery = op.kind === 'rect' || (op.kind === 'path' && this.responsive && this.mode === 'animated');
+      if (!scenery || op.roundness || op.stroke || op.shadow || !(spansWidth || spansHeight)) continue;
+      if (this.mode === 'storybook' && !(spansWidth && spansHeight)) continue;
+      node.fit = {
+        x: spansWidth ? centerX + (op.x - .5) * width : undefined,
+        y: spansHeight ? centerY + (op.y - .5) * height : undefined,
+        scaleX: spansWidth ? width / 1000 : 1,
+        scaleY: spansHeight ? height / 1000 : 1
+      };
+    }
+  }
+  private frame(render = true) {
     const now = performance.now(), enabled = this.mode === 'animated';
     for (const [id,node] of this.nodes) {
       if (node.container.destroyed) { node.gradients.forEach(g => g.destroy()); this.nodes.delete(id); continue; }
       if (node.retiring) { node.container.alpha = Math.max(0,1-(now-node.retiring)/280); if(now-node.retiring >= 280) this.remove(id); continue; }
       const op=node.op, motion=sampleMotion(enabled ? op.motions : undefined, this.time-(this.cues[op.id]?.startMs ?? 0));
-      let x=(op.x+motion.x)*1000, y=(op.y+motion.y)*1000, rotation=(op.rotation ?? 0)+motion.rotation;
+      const spanX = op.parent ? 1000 : this.spanX, spanY = op.parent ? 1000 : this.spanY;
+      let x = (node.fit?.x ?? (op.parent ? op.x * 1000 : (op.x - .5) * spanX + 500)) + motion.x * spanX;
+      let y = (node.fit?.y ?? (op.parent ? op.y * 1000 : (op.y - .5) * spanY + 500)) + motion.y * spanY;
+      let rotation = (op.rotation ?? 0) + motion.rotation;
       if(node.from && enabled && !this.stopped) {
         const t=Math.min(1,(now-node.from.at)/320), eased=1-(1-t)**3;
         x=node.from.x+(x-node.from.x)*eased; y=node.from.y+(y-node.from.y)*eased; rotation=node.from.rotation+(rotation-node.from.rotation)*eased;
@@ -141,9 +192,10 @@ export class Presentation {
       if(op.enter === 'pop') scale = entry === 1 ? 1 : 1-Math.exp(-7*entry)*Math.cos(10*entry);
       if(op.enter === 'drop') y -= (1-arrival)*180;
       node.container.position.set(x,y); node.container.rotation=rotation;
-      node.container.scale.set(motion.scaleX*scale,motion.scaleY*scale);
+      node.container.scale.set(motion.scaleX * scale * (node.fit?.scaleX ?? 1), motion.scaleY * scale * (node.fit?.scaleY ?? 1));
       node.container.alpha = op.alpha*motion.alpha*arrival;
     }
+    if (!render) return;
     if(now-this.lastStamp > 100) { this.host.dataset.animationTime = String(Math.round(this.time)); this.host.dataset.animationPaused=String(this.stopped); this.lastStamp=now; }
     // A still page is rendered on updates only. Animated scenes use the app ticker.
     if(this.mode === 'storybook') { this.app.stop(); this.app.renderer.render(this.app.stage); } else if(!this.app.ticker.started) this.app.start();

@@ -1,6 +1,6 @@
 import type { SceneAsset } from './assets';
 import type { Locale } from './languages';
-export type { SceneAsset, AssetRequest, ArtSelection, ArtSource, ImageRole, ImageProvider } from './assets';
+export type { SceneAsset, AssetRequest, ArtSelection, ArtSource, ImageRole, ImageProvider, CanvasSize } from './assets';
 export { usesImageModel } from './assets';
 import Ajv from 'ajv';
 import { sha256 as digest256 } from '@noble/hashes/sha2.js';

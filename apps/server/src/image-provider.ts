@@ -1,4 +1,4 @@
-import { assert, type AssetRequest, type ImageProvider } from '@and-there-was/scene';
+import { assert, type AssetRequest, type CanvasSize, type ImageProvider } from '@and-there-was/scene';
 import { openAIError, ProviderError } from './provider-error';
 
 export interface ImageArchive { request(value:unknown):void; response(value:unknown):void }
@@ -6,7 +6,14 @@ export interface ImageGenerator {
   readonly id: string;
   readonly provider: ImageProvider;
   readonly configured: boolean;
-  generate(request:AssetRequest, references:Buffer[], signal:AbortSignal, archive:ImageArchive):Promise<Buffer>;
+  generate(request:AssetRequest, references:Buffer[], signal:AbortSignal, archive:ImageArchive, viewport?:CanvasSize):Promise<Buffer>;
+}
+
+export function imagePrompt(request: AssetRequest, viewport?: CanvasSize): string {
+  if (request.role !== 'background' || !viewport) return request.prompt;
+  const { width, height } = viewport;
+  const orientation = width === height ? 'square' : width > height ? 'landscape' : 'portrait';
+  return request.prompt + `\nThe world canvas is ${width}x${height} CSS pixels (${orientation}, width/height ${(width / height).toFixed(3)}). Compose an edge-to-edge environment in that aspect ratio. Keep important scenery near the center and let the edges crop naturally when the device rotates. No frames or lettering.`;
 }
 
 export async function requestImage(provider: ImageProvider, modelId: string, endpoint: string, body: Record<string,unknown>,
