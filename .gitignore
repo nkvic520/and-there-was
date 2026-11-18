@@ -8,3 +8,12 @@ playwright-report/
 coverage/
 *.log
 *.tsbuildinfo
+
+# Public documentation: user guides, translations and demo media only.
+/docs/*
+!/docs/help/
+!/docs/i18n/
+!/docs/media/
+/AGENTS.md
+/ARCHITECTURE.md
+/DEVELOPMENT.md
