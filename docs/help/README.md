@@ -91,4 +91,3 @@ The owner can open `/inspect/<worldId>` to view saved inputs, generated content 
 **Why is generation failing?** Check the configured provider, model access and account balance. After updating keys or model settings, restart the service. The `/api/health` page shows the active model, without displaying the keys. A failed scene can be retried while keeping the last saved work.
 
 **Why is the picture still?** A picture-book world is intentionally still. In an animated world, check the play/pause control and the device’s reduced-motion setting.
-
