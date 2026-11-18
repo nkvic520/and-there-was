@@ -7,9 +7,9 @@
 ## 可以做什么
 
 - 从空画布开始，用一句话让球出现。
-- 通过 DeepSeek 描述和修改世界，加入鼠标点击或触摸互动。
+- 通过 OpenAI 或 DeepSeek 描述和修改世界，加入鼠标点击或触摸互动。
 - 选择持续活动的动态世界，或静态漫画／绘本页面。
-- 使用 Seedream 生成图片，选择免费素材，或上传小朋友自己的画作。
+- 使用 OpenAI 或 Seedream 生成图片，选择免费素材，或上传小朋友自己的画作。
 - 在同一张画布上继续创作，用保存的链接回到作品。
 
 界面支持十种语言。首次使用时跟随浏览器，匹配不到时用英文。在语言菜单手动选择后，这台设备会记住你的选择。每个世界单独保存自己的故事语言。
@@ -57,15 +57,16 @@ npm start
 | `HOST` | 监听地址，默认 `127.0.0.1`。 |
 | `PORT` | HTTP 端口，默认 `3000`。 |
 | `DATA_DIR` | 作品及记录的保存目录，默认 `./data`。 |
-| `GENERATOR_MODE` | `fixture` 使用内置样例；`deepseek` 开启自由创作。 |
+| `GENERATOR_MODE` | 默认自动选择。设为 `fixture` 可固定使用本地样例。 |
+| `OPENAI_API_KEY / OPENAI_TEXT_MODEL / OPENAI_IMAGE_MODEL` | 项目密钥、场景模型和绘图模型。 |
 | `DEEPSEEK_API_KEY / DEEPSEEK_MODEL / DEEPSEEK_BASE_URL` | DeepSeek 密钥、模型和接口地址。 |
 | `SEEDREAM_API_KEY / SEEDREAM_MODEL / SEEDREAM_BASE_URL / SEEDREAM_SIZE` | Seedream 密钥、模型、接口地址和图片尺寸。 |
 
 ### AI 服务
 
-设置 `GENERATOR_MODE=deepseek` 并填写 `DEEPSEEK_API_KEY` 即可启用 DeepSeek，其他连接参数见 `.env.example`。
+在服务端填入所属 API 组织的 `OPENAI_API_KEY` 并重启，即可用 OpenAI 创作场景和绘图。原有的 DeepSeek 和 Seedream 密钥可以同时保留。
 
-DeepSeek 编排场景和互动，Seedream 为 AI 画图生成图片。免费素材和上传本身不调用图片模型；DeepSeek 模式下编排场景仍使用文字模型。
+移除 OpenAI 密钥并重启后，`DEEPSEEK_API_KEY` 用于生成场景，`SEEDREAM_API_KEY` 用于可选的 AI 绘图。免费素材和上传作品可以直接放进画布。
 
 真实模型请求可能产生供应商费用。重新打开已有作品无需再次生成。
 

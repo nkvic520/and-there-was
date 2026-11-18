@@ -8,7 +8,7 @@ import { Store, HttpError } from './store';
 import { WorldService } from './service';
 import type { Generator } from './generator';
 import { Images } from './images';
-import type { ImageGenerator } from './seedream';
+import type { ImageGenerator } from './image-provider';
 
 export async function createApp(options: { dataDir: string; generator?: Generator; imageGenerator?: ImageGenerator; logger?: boolean; staticDir?: string; trialTimeoutMs?: number; generationTimeoutMs?: number }) {
   const app = Fastify({ logger: options.logger ?? false, bodyLimit: 512 * 1024, forceCloseConnections: true });
@@ -32,7 +32,7 @@ export async function createApp(options: { dataDir: string; generator?: Generato
     const status = record(error) && typeof error.statusCode === 'number' ? error.statusCode : 500;
     reply.code(status).send({ error: error instanceof Error ? error.message : 'Internal error' });
   });
-  app.get('/api/health', async () => ({ status: 'ok', mode: service.generatorId.startsWith('deepseek/') ? 'deepseek' : 'fixture', generator: service.generatorId, imageGenerator: images.generator.id, imagesConfigured: images.generator.configured, version: '0.5.0', archiveRetentionMonths: store.retentionMonths }));
+  app.get('/api/health', async () => ({ status: 'ok', mode: service.mode, generator: service.generatorId, imageProvider: images.generator.provider, imageGenerator: images.generator.id, imagesConfigured: images.generator.configured, version: '0.6.0', archiveRetentionMonths: store.retentionMonths }));
   app.get<{Params:{id:string}}>('/api/worlds/:id/images', async request => images.list(request.params.id));
   app.post<{Params:{id:string};Body:{name:string;role:ImageRole;dataBase64:string}}>('/api/worlds/:id/images', {
     bodyLimit:12*1024*1024,
@@ -72,7 +72,7 @@ export async function createApp(options: { dataDir: string; generator?: Generato
     };
   });
   app.post<{ Params: { id: string }; Body: { text: string; clientSubmissionId: string; uiLocale?: Locale } & ArtSelection }>('/api/worlds/:id/turns', {
-    schema: { body: { type: 'object', additionalProperties: false, required: ['text', 'clientSubmissionId'], properties: { text: { type: 'string', minLength: 1, maxLength: 2000 }, clientSubmissionId: { type: 'string', minLength: 8, maxLength: 100 }, artSource:{type:'string',enum:['library','seedream']},assetIds:{type:'array',maxItems:16,uniqueItems:true,items:{type:'string',pattern:'^[a-zA-Z0-9_-]{1,80}$'}},allowUploadReferences:{type:'boolean'},uiLocale:{type:'string',enum:locales} } } }
+    schema: { body: { type: 'object', additionalProperties: false, required: ['text', 'clientSubmissionId'], properties: { text: { type: 'string', minLength: 1, maxLength: 2000 }, clientSubmissionId: { type: 'string', minLength: 8, maxLength: 100 }, artSource:{type:'string',enum:['library','ai','seedream']},assetIds:{type:'array',maxItems:16,uniqueItems:true,items:{type:'string',pattern:'^[a-zA-Z0-9_-]{1,80}$'}},allowUploadReferences:{type:'boolean'},referenceProvider:{type:'string',enum:['seedream','openai']},uiLocale:{type:'string',enum:locales} } } }
   }, async (request, reply) => { const {text,clientSubmissionId,uiLocale,...selection}=request.body; return reply.code(202).send(service.submit(request.params.id,clientSubmissionId,text,selection,uiLocale)); });
   app.post<{ Params: { id: string } }>('/api/turns/:id/retry', async request => service.retry(request.params.id));
   app.post<{ Params: { id: string }; Body: InteractionReceipt }>('/api/worlds/:id/interactions', async request => {

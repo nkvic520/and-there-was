@@ -7,7 +7,10 @@ services:
       HOST: "0.0.0.0"
       PORT: "3000"
       DATA_DIR: /data
-      GENERATOR_MODE: ${GENERATOR_MODE:-fixture}
+      GENERATOR_MODE: ${GENERATOR_MODE:-auto}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_TEXT_MODEL: ${OPENAI_TEXT_MODEL:-gpt-6.2-sol}
+      OPENAI_IMAGE_MODEL: ${OPENAI_IMAGE_MODEL:-gpt-image-2.5-sunburst}
       DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-flash}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}

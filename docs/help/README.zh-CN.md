@@ -19,9 +19,9 @@
 
 创建世界时选择类型。要换一种作品，请点“新世界”。如果设备设置了减少动态效果，动画默认暂停，可手动点击播放。
 
-## 使用 DeepSeek 自由创作
+## 自由创作
 
-在 `.env` 设置 `GENERATOR_MODE=deepseek` 和自己的 `DEEPSEEK_API_KEY`，然后重启。可以描述一个场景，再继续向同一个世界提出要求，例如先发送 **要有光**，再发送 **碰三次出现一扇门**。
+在服务端 `.env` 填入 `OPENAI_API_KEY` 并重启。请使用获得订阅 API 额度的组织下的项目密钥。默认的 `auto` 模式用 OpenAI 生成场景和插画。若要使用 DeepSeek 和可选的 Seedream，移除 OpenAI 密钥，保留原有密钥并重启即可。可以描述一个场景，再继续向同一个世界提出要求，例如先发送 **要有光**，再发送 **碰三次出现一扇门**。
 
 生成需要一些时间，也可能失败。“再试一次”会发起新的模型请求，可能产生费用。尝试失败时，最近保存成功的场景仍然保留。
 
@@ -33,7 +33,7 @@
 
 ### AI 画图
 
-除 DeepSeek 外，还需要配置 Seedream。新场景的背景和角色可以分别生成，让角色独立活动；修改动作时可以复用已有图片。目前图片角色可以移动、缩放、旋转和响应点击，单张图片不等于具备独立四肢动作的角色。
+OpenAI 的同一把密钥可同时用于场景和插画。采用 DeepSeek 生成场景时，可另外配置 Seedream 绘图。新场景的背景和角色可以分别生成，让角色独立活动；修改动作时可以复用已有图片。目前图片角色可以移动、缩放、旋转和响应点击，单张图片不等于具备独立四肢动作的角色。
 
 ### 素材／我的作品
 
@@ -41,10 +41,12 @@
 
 - 支持最大 **8 MB** 的静态 PNG、JPEG、WebP。大照片被拒绝时，可以先缩小图片尺寸。
 - 原件会保留，显示副本会按正确方向处理并在需要时缩小。画纸背景会保留，上传不会自动抠图或改画。
-- 在 AI 画图模式中，只有勾选“允许把选中的上传作品发给 Seedream 作为参考图”，才允许将本次选中的上传图发给 Seedream。单纯上传或选图不代表授权。
-- 内置 [Kenney 素材](../../fixtures/library/README.md) 采用 CC0 许可，不作为图片模型参考图。已有 Seedream 图片可以作为后续编辑的参考。
+- 参考图选项会标明当前服务商（OpenAI 或 Seedream）。勾选后，本轮选中的上传作品才可发送给该服务商作为参考。再次提交或更换服务商时，需要重新勾选。
+- 内置 [Kenney 素材](../../fixtures/library/README.md) 采用 CC0 许可，不作为图片模型参考图。同一绘图服务以前生成的图片可作为后续编辑的参考。其他已保存的图片可以直接放入画面。
 
-上传和使用免费素材本身不调用 Seedream。在 `GENERATOR_MODE=deepseek` 模式下，场景编排仍会调用 DeepSeek。
+选择免费素材或直接使用上传作品时，画布读取已保存的图片。真实模式仍使用文本模型编排场景。若额度用完，可继续玩已保存的作品，由管理者查看余额、项目权限和模型开通状态。切换服务商由部署者修改配置。
+
+应用在本地保存作品，调用 OpenAI 生成场景时设置 `store:false`。若要让 OpenAI 处理低于 13 岁或当地数字同意年龄的儿童个人数据，请先为 API 组织或项目获批并开启零数据保留（ZDR），并使用兼容的模型。本地会话档案依照三个月期限单独清理。[OpenAI 未成年人指引](https://developers.openai.com/api/docs/guides/safety-checks/under-18-api-guidance) · [OpenAI 数据控制](https://developers.openai.com/api/docs/guides/your-data)
 
 ## 安装和环境配置
 
@@ -77,7 +79,10 @@ cp .env.example .env
 | `PORT` | `3000` | Node HTTP 端口。 |
 | `DATA_DIR` | `./data` | 保存作品和记录的目录。 |
 | `PUBLIC_ORIGIN` | 未设置 | 使用会改写 Host 的认证反向代理时，填写准确的公网来源，例如 `https://example.com`。 |
-| `GENERATOR_MODE` | `fixture` | 改为 `deepseek` 使用真实模型。 |
+| `GENERATOR_MODE` | `auto` | 优先使用配置好的 OpenAI，其次使用配置好的 DeepSeek，其余情况使用本地样例。显式指定 `fixture` 可固定运行样例。原有 `deepseek` 设置同样优先采用 OpenAI 密钥。 |
+| `OPENAI_API_KEY` | 空 | 生成场景和插画共用的项目密钥。订阅 API 额度归属于已关联的组织。 |
+| `OPENAI_TEXT_MODEL` | `gpt-6.2-sol` | 支持结构化 Responses 输出的场景和交互模型。 |
+| `OPENAI_IMAGE_MODEL` | `gpt-image-2.5-sunburst` | 绘图和参考图编辑模型。 |
 | `DEEPSEEK_API_KEY` | 空 | 服务端 DeepSeek 密钥。 |
 | `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` | DeepSeek 服务地址。 |
 | `DEEPSEEK_MODEL` | `deepseek-flash` | 使用的模型。 |
@@ -111,7 +116,7 @@ Node 部署保留 `DATA_DIR` 指向的整个目录；Compose 部署保留 `world
 
 **为什么作品不见了？** 请打开完整的 `/w/<worldId>` 地址，并确认服务使用原来的数据目录或卷。首页总是创建新世界。
 
-**为什么输入的句子没有用？** `fixture` 模式只支持上面列出的样例句子。需要自由创作时，请配置 DeepSeek 并重启服务。
+**为什么输入的句子没有用？** `fixture` 模式只支持上面列出的样例句子。需要自由创作时，请配置 OpenAI 或 DeepSeek 并重启服务。
 
 **为什么手机打不开？** 请使用电脑局域网地址，确认设备之间网络互通，并允许应用端口通过电脑防火墙。
 

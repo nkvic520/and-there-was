@@ -35,11 +35,11 @@
   "done": "Terminé",
   "artDone": "Terminer le choix des illustrations",
   "aiArt": "Dessin par IA",
-  "aiDetail": "Dessine personnages et décors avec Seedream.",
+  "aiDetail": "Dessine personnages et décors avec {provider}.",
   "library": "Images / mes dessins",
   "libraryDetail": "Choisis des images gratuites ou importe un dessin.",
-  "aiNote": "Seedream crée les illustrations. Tu peux les réutiliser quand tu changes un mouvement.",
-  "aiMissing": "Configurez Seedream sur le serveur pour créer de nouvelles illustrations.",
+  "aiNote": "{provider} crée les illustrations. Tu peux les réutiliser quand tu changes un mouvement.",
+  "aiMissing": "Configurez {provider} sur le serveur pour créer de nouvelles illustrations.",
   "libraryNote": "Images gratuites de Kenney (CC0). Dans ce mode, tes dessins restent sur ce serveur.",
   "artHelp": "Les images choisies accompagnent ta prochaine phrase.",
   "assetExample": "Choisis des images, puis envoie « {assets} ».",
@@ -55,7 +55,7 @@
   "illustration": "Dessin pleine page",
   "upload": "Importer le dessin",
   "fileRules": "PNG, JPEG ou WebP fixe, jusqu’à 8 Mo.",
-  "consent": "Autoriser l’envoi des dessins importés sélectionnés à Seedream comme images de référence",
+  "consent": "Autoriser l’envoi des dessins importés sélectionnés à {provider} comme images de référence",
   "myArt": "Mes dessins",
   "maxAssets": "Choisis jusqu’à 16 images à la fois.",
   "saving": "Enregistrement de ton dessin…",
@@ -92,5 +92,8 @@
   "taps": "Journal des clics et gestes",
   "versions": "Versions du monde",
   "timeline": "Chronologie des événements",
-  "retention": "Conservation des archives"
+  "retention": "Conservation des archives",
+  "quota": "Les crédits OpenAI de cette application sont épuisés. Demande à la personne qui la gère de vérifier le solde.",
+  "providerAccess": "Cette application ne peut pas utiliser le modèle OpenAI choisi. Demande à la personne qui la gère de vérifier les réglages.",
+  "refused": "Essaie de décrire une autre scène."
 }

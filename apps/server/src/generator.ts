@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { sha256, type ScenePackage, type WorldSnapshot, type ArtSelection, type SceneAsset, type AssetRequest } from '@and-there-was/scene';
+import { sha256, type ScenePackage, type WorldSnapshot, type ArtSelection, type SceneAsset, type AssetRequest, type ImageProvider } from '@and-there-was/scene';
 import { savedStoryLocale } from './story-language';
 import { languages, matchExample, type Locale } from '@and-there-was/scene/languages';
 
@@ -8,6 +8,7 @@ export type GenerationResult = ScenePackage & { storyLocale?: Locale; assetIds?:
 export interface GenerationContext {
   uiLocale?: Locale;
   artSelection?: ArtSelection;
+  imageProvider?: ImageProvider;
   availableAssets?: SceneAsset[];
   previousPackage?: ScenePackage;
   previousFailure?: { error: string; package?: ScenePackage; content?: string };

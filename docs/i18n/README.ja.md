@@ -7,9 +7,9 @@
 ## できること
 
 - 空のキャンバスに、一文でボールを出現させます。
-- DeepSeek で世界を描写・変更し、クリックやタッチで遊べるようにします。
+- OpenAI または DeepSeek で世界を描写・変更し、クリックやタッチで遊べるようにします。
 - 動き続ける世界、または静止した漫画・絵本のページを選べます。
-- Seedream で画像を生成するほか、無料素材や子どもの絵をアップロードして使えます。
+- OpenAI または Seedream で画像を生成するほか、無料素材や子どもの絵をアップロードして使えます。
 - 同じキャンバスで創作を続け、保存したリンクから作品に戻れます。
 
 画面は10言語に対応しています。初回はブラウザーの言語設定に従い、対応する言語がなければ英語を使います。言語メニューで選ぶと端末に保存されます。物語の言語は世界ごとに保存されます。
@@ -57,15 +57,16 @@ npm start
 | `HOST` | 待ち受けアドレス。初期値は `127.0.0.1`。 |
 | `PORT` | HTTP ポート。初期値は `3000`。 |
 | `DATA_DIR` | 作品と記録の保存先。初期値は `./data`。 |
-| `GENERATOR_MODE` | 内蔵サンプルは `fixture`、自由な創作は `deepseek`。 |
+| `GENERATOR_MODE` | 既定では自動選択。ローカルサンプルを使うには `fixture` を指定します。 |
+| `OPENAI_API_KEY / OPENAI_TEXT_MODEL / OPENAI_IMAGE_MODEL` | プロジェクトキー、シーン用モデル、画像用モデル。 |
 | `DEEPSEEK_API_KEY / DEEPSEEK_MODEL / DEEPSEEK_BASE_URL` | DeepSeek の API キー、モデル、接続先。 |
 | `SEEDREAM_API_KEY / SEEDREAM_MODEL / SEEDREAM_BASE_URL / SEEDREAM_SIZE` | Seedream の API キー、モデル、接続先、画像サイズ。 |
 
 ### AI サービス
 
-`GENERATOR_MODE=deepseek` と `DEEPSEEK_API_KEY` を設定すると DeepSeek を有効にできます。その他の接続設定は `.env.example` を参照してください。
+API 組織の `OPENAI_API_KEY` を設定して再起動すると、シーン作成と AI 作画に OpenAI を使います。DeepSeek と Seedream のキーは一緒に保存できます。
 
-DeepSeek がシーンと操作を組み立て、Seedream が AI 画像を描きます。無料素材とアップロード自体は画像モデルを呼び出しませんが、DeepSeek モードでのシーン作成にはテキストモデルを使用します。
+OpenAI のキーを外して再起動すると、シーンには `DEEPSEEK_API_KEY`、任意の AI 作画には `SEEDREAM_API_KEY` を使います。無料素材やアップロードした絵はそのまま配置できます。
 
 実際のモデルへのリクエストには、提供元の料金が発生する場合があります。保存済みの作品は再生成せずに開けます。
 

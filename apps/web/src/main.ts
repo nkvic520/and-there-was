@@ -228,7 +228,8 @@ async function playground() {
       } else if (event.kind === 'attempt.failed') {
         const records = await api<{ turns: { id: string; status: string }[] }>(`/api/worlds/${localWorldId}/activity`);
         if (records.turns.find(t => t.id === event.payload.turnId)?.status === 'failed') {
-          label(status, event.payload.reason === 'unsupported_sample' ? 'fixtureFailed' : 'failed'); failedTurn = event.payload.turnId; retry.hidden = false;
+          const messages: Record<string, Message> = {unsupported_sample:'fixtureFailed', provider_quota:'quota', provider_access:'providerAccess', provider_refusal:'refused'};
+          label(status, messages[event.payload.reason ?? ''] ?? 'failed'); failedTurn = event.payload.turnId; retry.hidden = false;
         }
       }
     }).catch(error => { label(status, 'connecting'); console.error(error); });
@@ -258,6 +259,7 @@ async function playground() {
     if (localStorage.getItem(outboxKey)) { label(status, 'sending'); return; }
     const clientSubmissionId = clientId();
     localStorage.setItem(outboxKey, JSON.stringify({ text: input.value, clientSubmissionId, uiLocale: uiLocale(), artSelection:art.selection(), expiresAt: addCalendarMonths(new Date(), 3).toISOString() }));
+    art.submitted();
     label(status, 'received'); input.value = ''; send.disabled = true; retry.hidden = true;
     void flushSubmission().catch(() => { label(status, 'offline'); });
   });

@@ -35,11 +35,11 @@
   "done": "Concluir",
   "artDone": "Concluir seleção de imagens",
   "aiArt": "Desenho com IA",
-  "aiDetail": "Desenhe personagens e cenas com o Seedream.",
+  "aiDetail": "Desenhe personagens e cenas com o {provider}.",
   "library": "Imagens / meus desenhos",
   "libraryDetail": "Escolha imagens gratuitas ou envie um desenho.",
-  "aiNote": "O Seedream cria imagens novas. Você pode reutilizá-las ao mudar um movimento.",
-  "aiMissing": "Configure o Seedream no servidor para criar novas imagens.",
+  "aiNote": "O {provider} cria imagens novas. Você pode reutilizá-las ao mudar um movimento.",
+  "aiMissing": "Configure o {provider} no servidor para criar novas imagens.",
   "libraryNote": "Imagens gratuitas de Kenney (CC0). Neste modo, seus desenhos ficam neste servidor.",
   "artHelp": "As imagens escolhidas acompanham a próxima frase.",
   "assetExample": "Escolha as imagens e envie “{assets}”.",
@@ -55,7 +55,7 @@
   "illustration": "Desenho de página inteira",
   "upload": "Enviar desenho",
   "fileRules": "PNG, JPEG ou WebP estático, até 8 MB.",
-  "consent": "Permitir que os desenhos enviados e selecionados sejam compartilhados com o Seedream como referência",
+  "consent": "Permitir que os desenhos enviados e selecionados sejam compartilhados com o {provider} como referência",
   "myArt": "Meus desenhos",
   "maxAssets": "Escolha até 16 imagens por vez.",
   "saving": "Salvando seu desenho…",
@@ -92,5 +92,8 @@
   "taps": "Registro de cliques e toques",
   "versions": "Versões do mundo",
   "timeline": "Linha do tempo de eventos",
-  "retention": "Retenção do arquivo"
+  "retention": "Retenção do arquivo",
+  "quota": "Os créditos da OpenAI deste aplicativo acabaram. Peça à pessoa responsável para verificar o saldo.",
+  "providerAccess": "Este aplicativo não consegue usar o modelo da OpenAI escolhido. Peça à pessoa responsável para conferir as configurações.",
+  "refused": "Tente descrever uma cena diferente."
 }

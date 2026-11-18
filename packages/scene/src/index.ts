@@ -1,6 +1,7 @@
 import type { SceneAsset } from './assets';
 import type { Locale } from './languages';
-export type { SceneAsset, AssetRequest, ArtSelection, ArtSource, ImageRole } from './assets';
+export type { SceneAsset, AssetRequest, ArtSelection, ArtSource, ImageRole, ImageProvider } from './assets';
+export { usesImageModel } from './assets';
 import Ajv from 'ajv';
 import { sha256 as digest256 } from '@noble/hashes/sha2.js';
 import type { Motion, WorldMode } from './motion';
@@ -243,7 +244,7 @@ export function validateAssets(value: unknown): asserts value is SceneAsset[] {
     for(const key of ['hash','originalHash'])assert(typeof a[key]==='string' && /^[a-f0-9]{64}$/.test(a[key] as string),'Invalid image hash');
     assert(a.mediaType==='image/png' && Number.isInteger(a.width) && Number.isInteger(a.height) && Number(a.width)>0 && Number(a.height)>0 && Number(a.width)<=2048 && Number(a.height)<=2048,'Invalid image dimensions');
     assert(typeof a.name==='string' && a.name.length<=120 && typeof a.credit==='string' && a.credit.length<=400,'Invalid asset description');
-    assert(['character','background','illustration'].includes(String(a.role)) && ['free','upload','seedream'].includes(String(a.source)),'Invalid asset origin');
+    assert(['character','background','illustration'].includes(String(a.role)) && ['free','upload','seedream','openai'].includes(String(a.source)),'Invalid asset origin');
     if(a.sourceUrl!==undefined)assert(typeof a.sourceUrl==='string' && a.sourceUrl.length<=500 && /^https:\/\//.test(a.sourceUrl),'Invalid source URL');
     pixels+=Number(a.width)*Number(a.height);
   }

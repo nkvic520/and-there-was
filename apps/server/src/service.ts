@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { assert, canonical, validatePackage, validateOutput, validateWorldMode, type ScenePackage, type TrialResult, type Candidate, type WorldSnapshot, type InteractionReceipt, type ArtSelection } from '@and-there-was/scene';
+import { assert, canonical, usesImageModel, validatePackage, validateOutput, validateWorldMode, type ScenePackage, type TrialResult, type Candidate, type WorldSnapshot, type InteractionReceipt, type ArtSelection } from '@and-there-was/scene';
 import { Store, HttpError, now, type AttemptRow, type TurnRow } from './store';
 import { FixtureGenerator, UnsupportedExample, type Generator } from './generator';
 import { Images } from './images';
+import { ProviderError, type ProviderFailure } from './provider-error';
 import { isLocale, type Locale } from '@and-there-was/scene/languages';
 
 export class WorldService {
@@ -12,6 +13,7 @@ export class WorldService {
   private retentionTimer: ReturnType<typeof setInterval>;
   private controllers = new Set<AbortController>();
   get generatorId() { return this.generator.id; }
+  get mode() { return this.generator.id.split('/')[0]; }
   constructor(readonly store: Store, private generator: Generator = new FixtureGenerator(), private trialTimeoutMs = 60000, private generationTimeoutMs?: number, readonly images = new Images(store)) {
     // On process restart, an uncommitted candidate is never inferred to be active.
     const interrupted = store.db.prepare("SELECT * FROM attempts WHERE status IN ('generating','trial')").all() as AttemptRow[];
@@ -27,7 +29,7 @@ export class WorldService {
   submit(worldId: string, clientId: string, text: string, selection: ArtSelection = {}, uiLocale: Locale = 'zh-CN'): TurnRow {
     if (!isLocale(uiLocale)) throw new HttpError(400, 'Unsupported interface language');
     this.store.world(worldId);
-    if (selection.artSource !== undefined && !['library','seedream'].includes(selection.artSource) || selection.assetIds !== undefined && (!Array.isArray(selection.assetIds) || selection.assetIds.length > 16 || selection.assetIds.some(id => typeof id !== 'string' || !/^[\w-]{1,80}$/.test(id))) || selection.allowUploadReferences !== undefined && typeof selection.allowUploadReferences !== 'boolean') throw new HttpError(400,'Invalid art selection');
+    if (selection.artSource !== undefined && !['library','ai','seedream'].includes(selection.artSource) || selection.referenceProvider !== undefined && !['openai','seedream'].includes(selection.referenceProvider) || selection.assetIds !== undefined && (!Array.isArray(selection.assetIds) || selection.assetIds.length > 16 || selection.assetIds.some(id => typeof id !== 'string' || !/^[\w-]{1,80}$/.test(id))) || selection.allowUploadReferences !== undefined && typeof selection.allowUploadReferences !== 'boolean') throw new HttpError(400,'Invalid art selection');
     const submittedAssets = this.images.available(worldId, selection);
     if (!/^[\w-]{8,100}$/.test(clientId) || !text.trim() || text.length > 2000) throw new HttpError(400, 'Invalid submission');
     const existing = this.store.db.prepare('SELECT * FROM turns WHERE world_id=? AND client_id=?').get(worldId, clientId) as TurnRow | undefined;
@@ -37,7 +39,7 @@ export class WorldService {
     }
     const id = randomUUID();
     this.store.db.transaction(() => {
-      if (this.generator.id.startsWith('deepseek/') || submittedAssets.some(a=>a.source==='upload')) this.store.db.prepare('UPDATE worlds SET retention_enabled=1 WHERE id=?').run(worldId);
+      if (this.mode !== 'fixture' || submittedAssets.some(a=>a.source==='upload')) this.store.db.prepare('UPDATE worlds SET retention_enabled=1 WHERE id=?').run(worldId);
       this.store.db.prepare("INSERT INTO turns(id,world_id,client_id,text,status,created_at,expires_at,art_selection,ui_locale) VALUES (?,?,?,?,'queued',?,?,?,?)").run(id, worldId, clientId, text, now(), this.store.expiryForWorld(worldId), canonical(selection), uiLocale);
       this.store.event(worldId, 'turn.queued', { turnId: id, receivedVersionId: this.store.world(worldId).versionId });
     })();
@@ -68,6 +70,11 @@ export class WorldService {
         const sdkVersion = baseline.mode ? 3 : 1;
         const requestHash = this.store.putJson({ adapter: this.generator.id, sdkVersion, worldMode: baseline.mode ?? 'legacy', text: turn.text, uiLocale: turn.ui_locale, baseline });
         this.store.db.transaction(() => {
+          if (this.mode !== 'fixture' && !turn.expires_at) {
+            // A fixture submission may be resumed with a real provider after restart.
+            this.store.db.prepare('UPDATE worlds SET retention_enabled=1 WHERE id=?').run(worldId);
+            this.store.db.prepare('UPDATE turns SET expires_at=? WHERE id=?').run(this.store.expiryForWorld(worldId,new Date(turn.created_at)),turn.id);
+          }
           this.store.db.prepare("INSERT INTO attempts(id,turn_id,status,base_version,base_revision,request_hash,created_at,updated_at,generator_id) VALUES (?,?,'generating',?,?,?,?,?,?)").run(attemptId, turn.id, baseline.versionId, baseline.revision, requestHash, now(), now(), this.generator.id);
           this.store.db.prepare("UPDATE turns SET status='generating',attempt_id=? WHERE id=?").run(attemptId, turn.id);
           this.store.event(worldId, 'attempt.generating', { turnId: turn.id, attemptId });
@@ -80,10 +87,10 @@ export class WorldService {
           const artSelection: ArtSelection = JSON.parse(turn.art_selection);
           const previousPackage = baseline.packageHash ? this.store.json<ScenePackage>(baseline.packageHash) : undefined;
           const failedPackage = previous?.package_hash ? this.store.json<ScenePackage>(previous.package_hash) : undefined;
-          const availableAssets = this.images.available(worldId, artSelection, previousPackage, failedPackage?.assets);
+          const availableAssets = this.images.available(worldId, artSelection, previousPackage, failedPackage?.assets, turn.id);
           const { pkg, storyLocale } = await Promise.race([
             this.generator.generate(turn.text, baseline, {
-              previousPackage, artSelection, availableAssets, uiLocale: turn.ui_locale,
+              previousPackage, artSelection, imageProvider:this.images.generator.provider, availableAssets, uiLocale: turn.ui_locale,
               previousFailure: previous ? { error: previous.error ?? 'Unknown error', ...(failedPackage ? { package: failedPackage } : {}), ...(previousResponse?.content ? { content: previousResponse.content.slice(0, 16000) } : {}) } : undefined,
               signal: controller.signal,
               request: value => { if (!this.closed && !controller.signal.aborted) this.store.db.prepare('UPDATE attempts SET request_hash=? WHERE id=?').run(this.store.putJson(value), attemptId); },
@@ -112,7 +119,7 @@ export class WorldService {
               controller.signal.throwIfAborted();
               return { pkg: {...pkg, assets:assetIds.length || generated.length ? [...selected,...generated] : pkg.assets}, storyLocale };
             }),
-            new Promise<never>((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new Error('生成超时，请重试。')); }, this.generationTimeoutMs ?? (artSelection.artSource === 'seedream' ? 500000 : 125000)); })
+            new Promise<never>((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new Error('生成超时，请重试。')); }, this.generationTimeoutMs ?? (usesImageModel(artSelection.artSource) ? 500000 : 125000)); })
           ]);
           if (this.closed) return;
           if (!this.store.attempt(attemptId).response_hash) this.store.db.prepare('UPDATE attempts SET response_hash=? WHERE id=?').run(this.store.put(JSON.stringify(pkg)), attemptId);
@@ -130,7 +137,7 @@ export class WorldService {
           })();
           return;
         } catch (error) {
-          if (!this.closed) this.fail(attemptId, error instanceof Error ? error.message : String(error), undefined, error instanceof UnsupportedExample ? 'unsupported_sample' : undefined);
+          if (!this.closed) this.fail(attemptId, error instanceof Error ? error.message : String(error), undefined, error instanceof UnsupportedExample ? 'unsupported_sample' : error instanceof ProviderError ? error.reason : undefined);
         } finally { if (timer) clearTimeout(timer); this.controllers.delete(controller); }
       }
     } finally { this.pumping.delete(worldId); }
@@ -147,7 +154,7 @@ export class WorldService {
     const previous = baseline.packageHash ? this.store.json<ScenePackage>(baseline.packageHash) : undefined;
     return { worldId: turn.world_id, turnId: turn.id, attemptId, packageHash: attempt.package_hash!, baseVersionId: attempt.base_version, baseRevision: attempt.base_revision, baseline, package: this.store.json(attempt.package_hash!), ...(previous ? { previousProtocol: JSON.parse(previous.files['protocol.json']) } : {}) };
   }
-  fail(attemptId: string, error: string, result?: unknown, reason?: 'unsupported_sample') {
+  fail(attemptId: string, error: string, result?: unknown, reason?: 'unsupported_sample' | ProviderFailure) {
     const attempt = this.store.attempt(attemptId), turn = this.store.turn(attempt.turn_id);
     if (!['generating', 'trial'].includes(attempt.status)) return;
     const resultHash = this.store.putJson(result ?? { ok: false, error });

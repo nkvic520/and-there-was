@@ -7,9 +7,9 @@ Aus einem Gedanken wird eine kleine Welt. Eine Leinwand für Kinder und die Erwa
 ## Was du machen kannst
 
 - Beginne mit einer leeren Leinwand und lass mit einem Satz einen Ball erscheinen.
-- Beschreibe und verändere mit DeepSeek eine Welt und füge Interaktionen per Klick oder Berührung hinzu.
+- Beschreibe und verändere mit OpenAI oder DeepSeek eine Welt und füge Interaktionen per Klick oder Berührung hinzu.
 - Wähle eine animierte Welt oder eine unbewegte Comic- oder Bilderbuchseite.
-- Erzeuge Bilder mit Seedream, wähle kostenlose Vorlagen oder lade eine eigene Kinderzeichnung hoch.
+- Erzeuge Bilder mit OpenAI oder Seedream, wähle kostenlose Vorlagen oder lade eine eigene Kinderzeichnung hoch.
 - Gestalte auf derselben Leinwand weiter und kehre über den gespeicherten Link zu deinem Werk zurück.
 
 Die Oberfläche unterstützt zehn Sprachen. Beim ersten Besuch gelten die Spracheinstellungen des Browsers, ersatzweise Englisch. Das Gerät merkt sich deine Wahl im Sprachmenü. Jede Welt speichert ihre eigene Erzählsprache.
@@ -57,15 +57,16 @@ Trage die Werte in `.env` ein und starte den Dienst nach Änderungen neu. API-Sc
 | `HOST` | Adresse zum Lauschen; Standard: `127.0.0.1`. |
 | `PORT` | HTTP-Port; Standard: `3000`. |
 | `DATA_DIR` | Ordner für Werke und Aufzeichnungen; Standard: `./data`. |
-| `GENERATOR_MODE` | `fixture` für das integrierte Beispiel, `deepseek` für freies Gestalten. |
+| `GENERATOR_MODE` | Automatische Auswahl als Standard. `fixture` aktiviert die lokalen Beispiele. |
+| `OPENAI_API_KEY / OPENAI_TEXT_MODEL / OPENAI_IMAGE_MODEL` | Projektschlüssel und Modelle für Szenen und Bilder. |
 | `DEEPSEEK_API_KEY / DEEPSEEK_MODEL / DEEPSEEK_BASE_URL` | API-Schlüssel, Modell und Endpunkt von DeepSeek. |
 | `SEEDREAM_API_KEY / SEEDREAM_MODEL / SEEDREAM_BASE_URL / SEEDREAM_SIZE` | API-Schlüssel, Modell, Endpunkt und Bildgröße von Seedream. |
 
 ### KI-Dienste
 
-Aktiviere DeepSeek mit `GENERATOR_MODE=deepseek` und `DEEPSEEK_API_KEY`. Weitere Verbindungseinstellungen stehen in `.env.example`.
+Trage den `OPENAI_API_KEY` deiner API-Organisation ein und starte die Anwendung neu. OpenAI erstellt dann Szenen und Bilder, auch wenn die Schlüssel für DeepSeek und Seedream vorhanden sind.
 
-DeepSeek gestaltet die Szene und ihre Interaktionen. Seedream zeichnet die KI-Bilder. Kostenlose Vorlagen und Uploads rufen das Bildmodell nicht auf; das Erstellen einer Szene im DeepSeek-Modus verwendet weiterhin das Textmodell.
+Entfernst du den OpenAI-Schlüssel und startest die Anwendung neu, dient `DEEPSEEK_API_KEY` der Szenenerstellung und `SEEDREAM_API_KEY` den optionalen KI-Bildern. Kostenlose Vorlagen und hochgeladene Zeichnungen lassen sich direkt platzieren.
 
 Echte Modellanfragen können Kosten beim Anbieter verursachen. Gespeicherte Werke lassen sich ohne erneute Generierung öffnen.
 

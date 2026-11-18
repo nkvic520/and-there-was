@@ -1,16 +1,20 @@
-import type { ArtSelection, SceneAsset } from '@and-there-was/scene';
+import type { ArtSelection, SceneAsset, ImageProvider } from '@and-there-was/scene';
 import { assetName, clearLabel, label, localize, translate } from './i18n';
 
 type Api = <T>(path: string, body?: unknown) => Promise<T>;
 
 export async function artPicker(worldId: string, mount: HTMLElement, api: Api) {
-  const health = await api<{ imagesConfigured: boolean; mode: string }>('/api/health');
+  const health = await api<{ imagesConfigured: boolean; mode: string; imageProvider: ImageProvider }>('/api/health');
   const fixture = health.mode === 'fixture';
+  const provider = health.imageProvider === 'openai' ? 'OpenAI' : 'Seedream';
   const key = `art:${worldId}`;
-  let selection: ArtSelection = { artSource: health.imagesConfigured && !fixture ? 'seedream' : 'library', assetIds: [], allowUploadReferences: false };
+  let selection: ArtSelection = { artSource: health.imagesConfigured && !fixture ? 'ai' : 'library', assetIds: [], allowUploadReferences: false };
   try {
     const saved = JSON.parse(localStorage.getItem(key) ?? 'null');
-    if (saved && ['seedream','library'].includes(saved.artSource)) selection = saved;
+    if (saved && ['ai','seedream','library'].includes(saved.artSource)) {
+      selection = {artSource:saved.artSource === 'seedream' ? 'ai' : saved.artSource,
+        assetIds:Array.isArray(saved.assetIds) ? saved.assetIds : [], allowUploadReferences:false};
+    }
   } catch { /* Ignore invalid preferences from a previous tab. */ }
   let assets: SceneAsset[] = [];
   const trigger = document.createElement('button');
@@ -24,7 +28,7 @@ export async function artPicker(worldId: string, mount: HTMLElement, api: Api) {
   dialog.innerHTML = `
     <div class="art-heading"><h2 id="art-heading" data-i18n="artHeading"></h2><button type="button" class="art-close" data-i18n="done" data-i18n-aria="artDone"></button></div>
     <div class="art-options">
-      <label><input type="radio" name="art-source" value="seedream"> <strong data-i18n="aiArt"></strong><span data-i18n="aiDetail"></span></label>
+      <label><input type="radio" name="art-source" value="ai"> <strong data-i18n="aiArt"></strong><span data-i18n="aiDetail"></span></label>
       <label><input type="radio" name="art-source" value="library"> <strong data-i18n="library"></strong><span data-i18n="libraryDetail"></span></label>
     </div>
     <p class="art-note"></p><p data-i18n="${fixture ? 'assetExample' : 'artHelp'}"></p>
@@ -47,15 +51,20 @@ export async function artPicker(worldId: string, mount: HTMLElement, api: Api) {
   const feedback = dialog.querySelector<HTMLElement>('.art-feedback')!, consent = dialog.querySelector<HTMLLabelElement>('.reference-consent')!;
   const consentInput = consent.querySelector<HTMLInputElement>('input')!;
 
+  label(dialog.querySelector<HTMLElement>('[data-i18n="aiDetail"]')!, 'aiDetail', {provider});
+  label(consent.querySelector('span')!, 'consent', {provider});
+
   function save() {
-    const ai = selection.artSource === 'seedream';
+    const ai = selection.artSource === 'ai';
     const selectedUpload = assets.some(a => a.source === 'upload' && selection.assetIds?.includes(a.imageId));
     if (!ai || !selectedUpload) selection.allowUploadReferences = false;
-    localStorage.setItem(key, JSON.stringify(selection));
+    if (selection.allowUploadReferences) selection.referenceProvider = health.imageProvider;
+    else delete selection.referenceProvider;
+    localStorage.setItem(key, JSON.stringify({artSource:selection.artSource,assetIds:selection.assetIds}));
     label(triggerName, ai ? 'aiArt' : 'library');
     count.textContent = selection.assetIds?.length ? ` (${selection.assetIds.length})` : '';
     for (const radio of dialog.querySelectorAll<HTMLInputElement>('[name="art-source"]')) radio.checked = radio.value === selection.artSource;
-    label(note, ai ? (health.imagesConfigured ? 'aiNote' : 'aiMissing') : 'libraryNote');
+    label(note, ai ? (health.imagesConfigured ? 'aiNote' : 'aiMissing') : 'libraryNote', {provider});
     consent.hidden = !ai || !selectedUpload;
     consentInput.checked = !!selection.allowUploadReferences;
   }
@@ -131,5 +140,11 @@ export async function artPicker(worldId: string, mount: HTMLElement, api: Api) {
     finally { button.disabled = false; }
   };
   await refresh();
-  return { fixture, selection: () => structuredClone(selection) };
+  return {
+    fixture, selection: () => structuredClone(selection),
+    submitted() {
+      // The outbox now owns consent for this one submission and any network resend.
+      if (selection.allowUploadReferences) { selection.allowUploadReferences = false; save(); }
+    }
+  };
 }
