@@ -67,4 +67,3 @@ The owner can open `/inspect/<worldId>` to view saved inputs, generated content 
 **Why doesn’t my sentence work?** This version uses a built-in sample. Send the exact phrase **有一个球**.
 
 **Why can’t the phone connect?** Use the computer’s LAN address, make sure both devices can reach that network, and allow the app’s port through the computer’s firewall.
-
