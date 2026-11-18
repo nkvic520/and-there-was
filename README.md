@@ -1,105 +1,75 @@
-# 就有了 · And There Was…
+# And There Was…
 
-说一句「有一个球」，它就出现在眼前。
+**English** · [简体中文](docs/i18n/README.zh-CN.md) · [繁體中文](docs/i18n/README.zh-TW.md) · [日本語](docs/i18n/README.ja.md) · [한국어](docs/i18n/README.ko.md) · [Español](docs/i18n/README.es.md) · [Français](docs/i18n/README.fr.md) · [Deutsch](docs/i18n/README.de.md) · [Português (Brasil)](docs/i18n/README.pt-BR.md) · [Русский](docs/i18n/README.ru.md)
 
-这是一个可自部署的 2D 世界实验。0.3 版本提供 **动态动画**和**静态漫画／绘本**两种世界，支持 DeepSeek 真实生成和无需密钥的确定性样例。生成结果经过服务端归档、协议校验、Worker 内 QuickJS 隔离试跑、事务提交和 PixiJS 渲染。真实模型可连续修改世界、生成鼠标/触屏互动，并迁移已有状态。
+A thought becomes a little world. A canvas for children and the grown-ups creating alongside them.
 
-新建世界时在画布上方选择模式，默认动态动画。动态世界支持持续动作、点击反应、渐变、曲线、组合角色和暂停；绘本世界生成静止插画或分镜及中文文字。模式随作品保存，生成后可点“新世界”创建另一种作品。旧作品仍能打开，画面升级需再次表达修改意图。
+## What you can do
 
-## 启动
+- Start with an empty canvas and bring a ball into the scene with a sentence.
+- Describe a world, change it with DeepSeek, and add click or touch interactions.
+- Choose a lively animated world or a still comic / picture-book page.
+- Keep the same canvas and return to your work using its saved link.
 
-需要 Node.js 24（已验证 24.11.1）和 npm。从仓库根目录执行：
+The app interface is currently in Simplified Chinese.
+
+## Try the demo
+
+There is no public hosted demo yet. Run the app locally and send **「有一个球」** (“There is a ball”). The built-in sample needs no model credentials and recognizes this exact Chinese phrase.
+
+![Built-in sample: a ball on the canvas](docs/media/ball.png)
+
+## Self-host
+
+Clone or download this repository. From its root folder, copy [`.env.example`](.env.example) to `.env`. The default configuration runs the sample without API keys.
+
+### With Docker Compose
+
+```sh
+docker compose up --build -d
+```
+
+Open [http://127.0.0.1:3000](http://127.0.0.1:3000). Compose keeps your work in the `world-data` volume; keep this volume when restarting or upgrading.
+
+### With Node.js
+
+Use Node.js **24.11.1 or a newer Node 24 release**, with npm. Run from the repository root:
 
 ```sh
 npm ci
-npm run dev
-```
-
-打开 <http://127.0.0.1:5173>。API 在 3000 端口，网页通过同源代理访问。输入「有一个球」，点击箭头发送。输入法选字和 Enter 不发送整句；只用发送按钮提交。系统听写所得文字也可编辑，应用不接收音频。
-
-生产构建使用一个 Node 进程同时提供页面、WASM 和 API：
-
-```sh
 npm run build
 npm start
 ```
 
-打开 <http://127.0.0.1:3000>。配置见 [.env.example](.env.example)。开发、生产和局域网启动命令都自动读取根目录 `.env`，进程环境变量优先；修改配置后重启服务。更改 API 端口时也需调整 Vite 代理。
+[http://127.0.0.1:3000](http://127.0.0.1:3000)
 
-同一可信局域网的手机试玩，构建后运行 `npm run start:lan`，在手机浏览器输入终端打印的电脑 WLAN/以太网地址，例如 `http://<电脑局域网IP>:3000/`。此模式监听所有网卡，仅用于你信任的局域网；未配置 `HOST` 时 `npm start` 只监听本机。页面在普通局域网 HTTP 下也能完成哈希校验和生成，不依赖仅限 HTTPS/localhost 的浏览器加密接口。
+For a phone on the same trusted network, run `npm run start:lan` after building and open the computer’s LAN address printed in the terminal.
 
-## DeepSeek 模式
+## Environment
 
-将 `.env.example` 复制为 `.env`，在本机编辑以下字段。不要将密钥写进源码、浏览器或提交到 Git：
+Set values in `.env` and restart the service after changes. Keep API keys on the server. Existing environment variables take precedence over `.env`.
 
-```dotenv
-GENERATOR_MODE=deepseek
-DEEPSEEK_BASE_URL=https://api.deepseek.com
-DEEPSEEK_MODEL=deepseek-flash
-DEEPSEEK_API_KEY=在本机填写
-ARCHIVE_RETENTION_MONTHS=3
-```
+| Setting | Purpose |
+| --- | --- |
+| `HOST` | Listen address; default `127.0.0.1`. |
+| `PORT` | HTTP port; default `3000`. |
+| `DATA_DIR` | Saved works and records; default `./data`. |
+| `GENERATOR_MODE` | `fixture` for the bundled sample; `deepseek` for free-form creation. |
+| `DEEPSEEK_API_KEY / DEEPSEEK_MODEL / DEEPSEEK_BASE_URL` | DeepSeek API key, model and endpoint. |
 
-启动后依次提交「要有光」「碰三次出现一扇门」，点击生成的光三次。每轮由模型定义状态、规则和代码；宿主没有内置这些句子或门的玩法。已有次数可以通过新脚本的 `migrate` 保留。模型可能输出不合法的 JSON、协议或代码；这类尝试留下诊断，原来的世界不被替换。点击“再试一次”会将前一次失败诊断和产物交给模型修正，每次重试是新的模型请求。
+### AI services
 
-当前接入的是文字生成协议和 JavaScript 的 Chat Completions API，没有图像、音频或视频输入。密钥只在服务器调用 DeepSeek 时使用。请求包含本轮文字、当前快照和上一运行包；原始 SSE 响应、片段、用量、候选包与执行回执存入私有档案。
+Enable DeepSeek by setting `GENERATOR_MODE=deepseek` and `DEEPSEEK_API_KEY`. Other connection settings are listed in `.env.example`.
 
-`GENERATOR_MODE=fixture` 可切回无密钥样例；默认也是此模式。样例只处理「有一个球」：动态模式是一颗持续弹跳的球，绘本模式是一页有标题和旁白的插画。反复主动发送仍只有一个球。既有作品由保存的运行包恢复，不依赖当前选择的生成器。`/api/health` 显示实际模式和模型名称。
+Real model requests may incur provider charges. Existing works can be reopened without generating them again.
 
-## 查看和恢复
+## Help
 
-打开首页会创建一个空世界，并自动变成 `/w/<世界ID>`。**保留这个完整 URL**，重启后打开它会恢复同一世界。首页 `/` 总是新建一个空世界。
+- [User guide (English)](docs/help/README.md)
+- [使用帮助（简体中文）](docs/help/README.zh-CN.md)
 
-动画时间、暂停状态和点击动作的起始位置单独保存，不会逐帧创建世界版本。客户端每两秒、切到后台及暂停时发送进度；意外退出或断网可能损失尚未送达的动画进度，已提交的游戏状态不受影响。隐藏页面停止推进动画。系统偏好减少动态效果时默认暂停，可手动播放。绘本按整页缩放，不持续刷新画布。
+This is a private, single-owner app without built-in accounts. For internet access, place it behind HTTPS and authentication. Save the full `/w/<worldId>` link to reopen the same world.
 
-项目所有者可直接打开 `/inspect/<世界ID>` 查看原文、实际请求与原始响应、协议、脚本、哈希、试跑结果、版本和互动事件。此入口不放在孩子的画布上。当前作品的协议和源码独立展示，历史轮次到期清理后仍可查看。
+## License
 
-默认持久目录为 `data/`：`worlds.sqlite`（含 WAL/SHM）和 `artifacts/`。不要删除目录或使用另一个 `DATA_DIR` 后期待旧场景出现。停止服务后复制整个目录可做本地备份；不要在服务运行时只复制 SQLite 主文件。真实会话数据和 `.env` 被 Git/Docker 忽略。
-
-每次主动发送是一个新轮次；网络重发复用提交 ID。失败尝试可重试，最近成功的场景保持不变。重启时未提交的尝试标记为中断，可再次尝试。已加载的互动在短暂断网时可本地执行，最多暂存 100 次触碰；重连后去重保存。离线首次加载/刷新页面不在当前支持范围内。
-
-## 档案保留
-
-真实会话逐轮保留 **3 个日历月**，按 UTC 生成时间计算，月底向目标月份最后一天截断。到期删除该轮原文、请求响应、试跑产物及无引用的历史文件；互动和事件各自计时。服务启动及每小时执行一次清理，未完成尝试或仍被未过期记录引用的版本暂缓删除。
-
-**当前作品的快照、运行包及其必需文件继续保留**，可重启恢复。合成样例档案不自动清理。清理覆盖本实例的数据库和素材目录，不处理部署者另存的备份、外部代理日志或模型供应商的记录。浏览器待提交文字和互动队列也有三个月期限，在再次打开相应世界时检查过期。
-
-## 检查
-
-```sh
-npm run check
-npm run build
-npm run test:e2e
-```
-
-本机端到端测试使用已安装的 Chrome、Edge，另外运行手机尺寸/触摸模拟。没有这两个浏览器时可用 `npx playwright install chromium`，再设置 `CI=1` 执行端到端测试。CI 自动安装 Chromium。
-
-测试会启动独立的 3179 端口服务和临时数据目录，执行真实脚本、重启服务进程、用新的浏览器上下文恢复并比较完整快照和暂停画面像素。DeepSeek 自动化测试使用本地流式响应替身，不消耗模型额度；真实模型由维护者单独验收。截图、浏览器版本和计时保存在忽略的 `test-results/`；见 [0.3 验收记录](docs/acceptance-world-modes.md)、[0.2 验收记录](docs/acceptance-deepseek.md) 和 [样例版验收记录](docs/acceptance.md)。
-
-## 容器与后续演示
-
-```sh
-docker compose up --build -d
-# 停止后启动，保持 world-data 卷即可恢复。
-docker compose restart
-# 独立临时卷的构建与恢复测试：
-npm run test:container
-```
-
-Compose 读取根目录 `.env` 的生成模式和 DeepSeek 配置，只绑定本机 3000 端口。保留 `world-data` 卷；不要执行删除卷的命令后期待恢复。CI 检查 Windows、Linux 和全栈容器。
-
-2026-11-17 确认：**演示地址改为后期自建，本阶段不创建或验收 Codespaces 实例**。保留 `.devcontainer` 供以后使用；如自行启用，运行 `npm run dev` 后只转发 5173，保持端口 Private。当前不提供公开演示、发行镜像或 Release。
-
-当前是单实例、单所有者的私有试玩版本，没有应用内账号系统。用于本机、可信局域网或私有 Codespaces；公网自部署需先配置 HTTPS 和身份访问控制。源码公开不代表档案公开。
-
-## 当前边界
-
-- SDK 1/2 继续支持旧作品。SDK 3 增加世界模式、曲线路径、文字、渐变、分组和有界关键帧；协议使用闭合 JSON Schema 子集。图画和动作仍由模型生成的脚本定义，宿主只提供通用绘图与播放能力。
-- 脚本在 QuickJS/WASM 中执行，不向其注入 DOM、网络、文件或身份能力。500ms 调用预算、16MiB QuickJS 堆，并有外层 Worker 超时。SDK 1/2 最多 1,000 条操作；SDK 3 最多 256 个节点、64 个动画节点，另有路径和文字预算。该堆限制不代表整个浏览器进程内存限制。
-- 连续动画由宿主播放已校验的关键帧，不按帧调用模型或执行任意脚本。当前没有完整物理、碰撞、寻路系统，也没有图像模型生成的贴图、骨骼动画或音频；表现力与构图仍受本次模型输出影响。
-- 试跑结果在服务端二次校验并提交后才显示；保存后校验失败会保留旧场景。恢复时重新加载对应脚本，重建的状态和绘图必须与已保存快照一致。
-- 试跑回执来自私有实例的可信宿主，不作为面向不可信多用户的远程执行证明。
-- 撤销、完整导出、固定版本作品发布、账号权限和正式 GHCR Release 留在后续阶段；本次不代表完整需求 R1—R8 均已完成。
-- 样例版的 Windows Edge/Chrome 系统中文输入法、REDMI Turbo 4 Edge 输入与恢复已实测。新增真实模型互动的测试与设备覆盖以 0.2 验收记录为准，模拟触屏不替代实机。
-
-需求依据：[项目架构与需求说明](docs/and-there-was-architecture-and-requirements.md) · [GitHub 开发说明](docs/and-there-was-github-development-guide.md)。开源许可：[MIT](LICENSE)。
+Code: [MIT](LICENSE).
