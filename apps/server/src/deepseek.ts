@@ -1,5 +1,8 @@
 import { assert, canonical, record, sha256, utf8Size, type WorldSnapshot } from '@and-there-was/scene';
 import { FixtureGenerator, type Generator, type GenerationContext, type GenerationResult } from './generator';
+import { isLocale, locales } from '@and-there-was/scene/languages';
+import { namesLanguage, requestedStoryLocale } from './language-request';
+import { firstStoryLocale, savedStoryLocale } from './story-language';
 import { ART_PROMPT } from './art-prompt';
 
 import { PROMPT_VERSION, SCENE_PROMPT } from './scene-prompt';
@@ -20,13 +23,23 @@ export class DeepSeekGenerator implements Generator {
   }
   async generate(text: string, baseline: WorldSnapshot, context?: GenerationContext): Promise<GenerationResult> {
     assert(this.options.apiKey.trim(), '请在服务端 .env 配置 DEEPSEEK_API_KEY，然后重启服务。');
+    const saved = savedStoryLocale(baseline) ?? null;
+    const uiLocale = context?.uiLocale ?? 'zh-CN';
+    const defaultLocale = saved ?? firstStoryLocale(text, uiLocale);
+    const requested = requestedStoryLocale(text, defaultLocale);
+    const target = requested ?? defaultLocale;
+    const language = {
+      target, saved, supported: locales,
+      previousStoryText: baseline.operations.filter(op => op.kind === 'text').map(op => ({ id: op.id, text: op.text }))
+    };
+    const languageInstruction = `\nFor this particular artwork the target storyLocale is "${target}". Write all on-page text and new artwork names in that language. Use language.previousStoryText as the source for continuing or translating the work. Double-check that the title and narration identify the same character as the source. A change to another target requires an explicit language request quoted from the child as languageChangeQuote.`;
     const body = {
-      model: this.model, messages: [{ role: 'system', content: SCENE_PROMPT + (context?.artSelection?.artSource ? ART_PROMPT : '') }, { role: 'user', content: canonical({ worldMode: baseline.mode ?? 'animated', request: text, snapshot: baseline, previousPackage: context?.previousPackage ?? null, previousFailure: context?.previousFailure ?? null, ...(context?.artSelection?.artSource ? {artSelection:context.artSelection,availableAssetIds:context.availableAssets?.map(a=>a.id)??[],availableAssets:context.availableAssets??[]} : {}) }) }],
+      model: this.model, messages: [{ role: 'system', content: SCENE_PROMPT + (context?.artSelection?.artSource ? ART_PROMPT : '') + languageInstruction }, { role: 'user', content: canonical({ language, worldMode: baseline.mode ?? 'animated', request: text, snapshot: baseline, previousPackage: context?.previousPackage ?? null, previousFailure: context?.previousFailure ?? null, ...(context?.artSelection?.artSource ? {artSelection:context.artSelection,availableAssetIds:context.availableAssets?.map(a=>a.id)??[],availableAssets:context.availableAssets??[]} : {}) }) }],
       // The live API rejects JSON output together with safety_check=high.
       // Keep its default checks; every package still passes our schema/runtime gate.
       thinking: { type: 'disabled' }, temperature: 0.2, response_format: { type: 'json_object' }, max_tokens: this.options.maxTokens ?? 16384, stream: true, stream_options: { include_usage: true }
     };
-    context?.request({ adapter: this.id, promptVersion: PROMPT_VERSION+(context?.artSelection?.artSource?'+images-4/2026-11-17.2':''), endpoint: this.endpoint, body });
+    context?.request({ adapter: this.id, promptVersion: PROMPT_VERSION+(context?.artSelection?.artSource?'+images-4/2026-11-18.i18n':''), endpoint: this.endpoint, body });
     const signal = AbortSignal.any([AbortSignal.timeout(this.options.timeoutMs ?? 120000), ...(context ? [context.signal] : [])]);
     let raw = '', rawBytes = 0, buffer = '', pendingArchive = '', lastArchive = Date.now(), content = '', finishReason = '', done = false, status: number | undefined, usage: unknown, responseId: string | undefined;
     const redact = (value: string) => value.replaceAll(this.options.apiKey, '[REDACTED]');
@@ -80,12 +93,18 @@ export class DeepSeekGenerator implements Generator {
       assert(content.trim(), '模型返回空 JSON，可以重试。');
       const value: unknown = JSON.parse(content);
       assert(record(value) && record(value.protocol) && typeof value.script === 'string' && record(value.view), 'Model must return protocol, script and view');
+      assert(isLocale(value.storyLocale), 'Model must return a supported storyLocale');
+      if (requested) assert(value.storyLocale === requested, 'The scene must use the explicitly requested story language');
+      if (value.storyLocale !== target) {
+        const quote = value.languageChangeQuote;
+        assert(typeof quote === 'string' && text.includes(quote) && namesLanguage(quote, value.storyLocale), 'Changing the story language requires a quoted request from this turn');
+      }
       const files = { 'protocol.json': JSON.stringify(value.protocol), 'scene.js': value.script, 'view.json': JSON.stringify(value.view) };
       const hashes: Record<string, string> = {};
       for (const [name, text] of Object.entries(files)) hashes[name] = await sha256(text);
       assert([2,3,4].includes(Number(value.protocol.schemaVersion)), 'Unsupported generated SDK');
       if (context?.artSelection?.artSource) assert(value.protocol.schemaVersion === 4 && Array.isArray(value.assetIds) && Array.isArray(value.assetRequests), '图片世界需要 SDK 4 和素材清单');
-      return { formatVersion: 1, sdkVersion: value.protocol.schemaVersion as 2 | 3 | 4, entry: 'scene.js', files, hashes, assets: [], ...(value.assetIds !== undefined ? {assetIds:value.assetIds as string[]} : {}), ...(value.assetRequests !== undefined ? {assetRequests:value.assetRequests as GenerationResult['assetRequests']} : {}) };
+      return { storyLocale: value.storyLocale, formatVersion: 1, sdkVersion: value.protocol.schemaVersion as 2 | 3 | 4, entry: 'scene.js', files, hashes, assets: [], ...(value.assetIds !== undefined ? {assetIds:value.assetIds as string[]} : {}), ...(value.assetRequests !== undefined ? {assetRequests:value.assetRequests as GenerationResult['assetRequests']} : {}) };
     } catch (error) {
       throw new Error(redact(signal.aborted ? '模型请求超时或已中断，可以重试。' : error instanceof Error ? error.message : String(error)));
     } finally {

@@ -4,42 +4,44 @@
 
 ## Create and reopen a world
 
-Open the home page to create an empty world. Type **有一个球** and click the arrow to send it. Choosing a word with an input method or pressing Enter does not send the sentence; use the send button.
+Open the home page to create an empty world. Type **There is a ball** and click the arrow to send it. Choosing a word with an input method or pressing Enter does not send the sentence; use the send button.
 
 The address becomes `/w/<worldId>`. Save or bookmark the **whole address** to return to that work. Opening the home page creates another world. A saved world can be reopened after a service restart as long as its data is kept.
 
-The app interface is currently in Simplified Chinese. The bundled sample recognizes exact Chinese phrases, so copy the examples as shown.
+Use the globe in the corner to choose a menu language. The app remembers it on this device. On a first visit it checks your browser languages and falls back to English. The sample input and artwork picker show phrases you can send in the selected language.
+
+The first meaningful sentence sets the language of a new story. For a name such as “Milo” or an emoji, the app uses the menu language. A world keeps its story language as you edit it or open it on another device. To change the language of the work, ask explicitly, for example “Tell this story in Japanese.” Titles and narration follow the story language. Your submitted sentences and the names you give uploaded drawings are saved as written.
 
 ## Choose a world type
 
-- **动态动画 — Animated:** a world with ongoing movement and click or touch interactions. Use **暂停动画** to pause and **播放动画** to resume.
-- **静态漫画／绘本 — Comic / picture book:** a still illustration or comic page with text.
+- **Animation** — a world with ongoing movement and click or touch interactions. Use **Pause animation** to pause and **Play animation** to resume.
+- **Comic / picture book** — a still illustration or comic page with text.
 
-Choose a type when starting a world. Use **新世界** to create a different kind of work. If your device prefers reduced motion, animation starts paused and can be resumed with the play button.
+Choose a type when starting a world. Use **New world** to create a different kind of work. If your device prefers reduced motion, animation starts paused and can be resumed with the play button.
 
 ## Free-form creation with DeepSeek
 
-Set `GENERATOR_MODE=deepseek` and your own `DEEPSEEK_API_KEY` in `.env`, then restart. You can describe a scene and add requests to the same world, such as **要有光** (“Let there be light”) followed by **碰三次出现一扇门** (“After three touches, make a door appear”).
+Set `GENERATOR_MODE=deepseek` and your own `DEEPSEEK_API_KEY` in `.env`, then restart. You can describe a scene and add requests to the same world, such as **Let there be light** followed by **After three touches, make a door appear**.
 
-The model can take some time and may fail. **再试一次** retries a failed request; it sends another model request and may incur a charge. If an attempt fails, the last saved scene stays available.
+The model can take some time and may fail. **Try again** retries a failed request; it sends another model request and may incur a charge. If an attempt fails, the last saved scene stays available.
 
-Set `GENERATOR_MODE=fixture` for the no-key sample. This mode recognizes **有一个球** and **使用选中的素材**, rather than arbitrary sentences.
+Set `GENERATOR_MODE=fixture` for the no-key sample. This mode recognizes **There is a ball** and **Use the selected assets**, rather than arbitrary sentences.
 
 ## Choose artwork
 
 Open the artwork selector below the input box. This choice is independent of the world type.
 
-### AI 画图 — AI artwork
+### AI artwork
 
 Configure Seedream in addition to DeepSeek. New environments and characters can be drawn separately so the characters can move. Existing pictures can be reused for motion changes. An image character can move, scale, rotate and react to a click; a single image does not provide articulated limb animation.
 
-### 素材／我的作品 — Assets / my artwork
+### Assets / my artwork
 
-Select bundled images or upload a drawing. Give an upload a name and choose its role: **角色／贴纸** (character / sticker), **背景** (background) or **整页画作** (full-page artwork). The selected images accompany your next sentence. In sample mode, send **使用选中的素材** to use them.
+Select bundled images or upload a drawing. Give an upload a name and choose its role: **Character / sticker**, **Background** or **Full-page drawing**. The selected images accompany your next sentence. In sample mode, send **Use the selected assets** to use them.
 
 - Static PNG, JPEG and WebP files up to **8 MB** are supported. If a large photo is rejected, reduce its dimensions before uploading.
 - The original file is kept. The display copy is oriented correctly and resized when needed. Paper backgrounds are kept; uploading does not automatically cut out or repaint the drawing.
-- In AI artwork mode, the checkbox **允许把选中的上传作品发给 Seedream 作为参考图** explicitly permits sending the selected uploads to Seedream as reference images for that submission. Selecting or uploading an image alone does not grant this permission.
+- In AI artwork mode, the checkbox **Allow the selected uploaded drawings to be sent to Seedream as reference images** explicitly permits sending the selected uploads to Seedream as reference images for that submission. Selecting or uploading an image alone does not grant this permission.
 - Bundled [Kenney assets](../../fixtures/library/README.md) use CC0 and are not sent as image-model references. Existing Seedream images can be used as references for later edits.
 
 Uploading and using free assets does not call Seedream. When `GENERATOR_MODE=deepseek`, composing a scene still uses DeepSeek.

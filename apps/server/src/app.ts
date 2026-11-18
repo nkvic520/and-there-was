@@ -3,6 +3,7 @@ import fastifyStatic from '@fastify/static';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { record, type TrialResult, type InteractionReceipt, type WorldMode, type MotionCues, type ArtSelection, type ImageRole, type SceneAsset } from '@and-there-was/scene';
+import { locales, type Locale } from '@and-there-was/scene/languages';
 import { Store, HttpError } from './store';
 import { WorldService } from './service';
 import type { Generator } from './generator';
@@ -31,7 +32,7 @@ export async function createApp(options: { dataDir: string; generator?: Generato
     const status = record(error) && typeof error.statusCode === 'number' ? error.statusCode : 500;
     reply.code(status).send({ error: error instanceof Error ? error.message : 'Internal error' });
   });
-  app.get('/api/health', async () => ({ status: 'ok', mode: service.generatorId.startsWith('deepseek/') ? 'deepseek' : 'fixture', generator: service.generatorId, imageGenerator: images.generator.id, imagesConfigured: images.generator.configured, version: '0.4.0', archiveRetentionMonths: store.retentionMonths }));
+  app.get('/api/health', async () => ({ status: 'ok', mode: service.generatorId.startsWith('deepseek/') ? 'deepseek' : 'fixture', generator: service.generatorId, imageGenerator: images.generator.id, imagesConfigured: images.generator.configured, version: '0.5.0', archiveRetentionMonths: store.retentionMonths }));
   app.get<{Params:{id:string}}>('/api/worlds/:id/images', async request => images.list(request.params.id));
   app.post<{Params:{id:string};Body:{name:string;role:ImageRole;dataBase64:string}}>('/api/worlds/:id/images', {
     bodyLimit:12*1024*1024,
@@ -70,9 +71,9 @@ export async function createApp(options: { dataDir: string; generator?: Generato
       attempts: store.db.prepare('SELECT a.id,a.status FROM attempts a JOIN turns t ON a.turn_id=t.id WHERE t.world_id=? ORDER BY a.seq DESC LIMIT 200').all(request.params.id)
     };
   });
-  app.post<{ Params: { id: string }; Body: { text: string; clientSubmissionId: string } & ArtSelection }>('/api/worlds/:id/turns', {
-    schema: { body: { type: 'object', additionalProperties: false, required: ['text', 'clientSubmissionId'], properties: { text: { type: 'string', minLength: 1, maxLength: 2000 }, clientSubmissionId: { type: 'string', minLength: 8, maxLength: 100 }, artSource:{type:'string',enum:['library','seedream']},assetIds:{type:'array',maxItems:16,uniqueItems:true,items:{type:'string',pattern:'^[a-zA-Z0-9_-]{1,80}$'}},allowUploadReferences:{type:'boolean'} } } }
-  }, async (request, reply) => { const {text,clientSubmissionId,...selection}=request.body; return reply.code(202).send(service.submit(request.params.id,clientSubmissionId,text,selection)); });
+  app.post<{ Params: { id: string }; Body: { text: string; clientSubmissionId: string; uiLocale?: Locale } & ArtSelection }>('/api/worlds/:id/turns', {
+    schema: { body: { type: 'object', additionalProperties: false, required: ['text', 'clientSubmissionId'], properties: { text: { type: 'string', minLength: 1, maxLength: 2000 }, clientSubmissionId: { type: 'string', minLength: 8, maxLength: 100 }, artSource:{type:'string',enum:['library','seedream']},assetIds:{type:'array',maxItems:16,uniqueItems:true,items:{type:'string',pattern:'^[a-zA-Z0-9_-]{1,80}$'}},allowUploadReferences:{type:'boolean'},uiLocale:{type:'string',enum:locales} } } }
+  }, async (request, reply) => { const {text,clientSubmissionId,uiLocale,...selection}=request.body; return reply.code(202).send(service.submit(request.params.id,clientSubmissionId,text,selection,uiLocale)); });
   app.post<{ Params: { id: string } }>('/api/turns/:id/retry', async request => service.retry(request.params.id));
   app.post<{ Params: { id: string }; Body: InteractionReceipt }>('/api/worlds/:id/interactions', async request => {
     const body = request.body;

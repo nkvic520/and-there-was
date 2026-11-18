@@ -1,10 +1,11 @@
 {
   "name": "@and-there-was/scene",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./languages": "./src/languages.ts",
     "./sandbox": "./src/sandbox.ts"
   },
   "dependencies": {

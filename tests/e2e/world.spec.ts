@@ -7,6 +7,7 @@ import { createServer } from 'node:http';
 import { modelReply, streamReply, animatedReply, withImageWorkflow } from '../helpers/interactive';
 import { Store } from '../../apps/server/src/store';
 import { addCalendarMonths } from '@and-there-was/scene';
+import { languages, locales } from '@and-there-was/scene/languages';
 import { imageReply } from '../helpers/images';
 
 let server: ChildProcess, dataDirectory: string, serverLog = '';
@@ -33,8 +34,10 @@ test.afterAll(async () => {
   rmSync(dataDirectory, { recursive: true, force: true });
 });
 
+test.use({ locale: 'zh-CN' });
+
 async function freshContext(browser: Browser, projectUse: Record<string, unknown>) {
-  return browser.newContext({ viewport: projectUse.viewport as { width: number; height: number } | undefined, isMobile: Boolean(projectUse.isMobile), hasTouch: Boolean(projectUse.hasTouch) });
+  return browser.newContext({ locale: 'zh-CN', viewport: projectUse.viewport as { width: number; height: number } | undefined, isMobile: Boolean(projectUse.isMobile), hasTouch: Boolean(projectUse.hasTouch) });
 }
 
 test('real fixture → isolated worker → saved scene → fresh-browser restore after process restart', async ({ page, browser, request }, info) => {
@@ -364,4 +367,58 @@ test('Seedream HTTP transport, image decoding, interactive sprites, failure roll
     expect(imageCalls).toBe(3);const records=await(await request.get(`/api/worlds/${id}/records`)).json();expect(records.imageJobs.map((j:{status:string})=>j.status)).toEqual(['completed','failed','completed']);
     await page.screenshot({path:info.outputPath('generated-sprite.png')});expect(errors).toEqual([]);
   } finally {await stop();modelEnvironment={};await start();model.closeAllConnections();await new Promise<void>(r=>model.close(()=>r()));}
+});
+
+
+test('menu languages preserve drafts and the current world across devices and a service restart', async ({ page, browser, request }, info) => {
+  await page.goto('/?mode=storybook');
+  const app = page.locator('#app'), input = page.locator('#thought'), picker = page.locator('.language-picker select');
+  await expect(app).toHaveAttribute('data-revision', '0');
+  const url = page.url(), worldId = url.split('/').at(-1)!;
+  const canvas = await page.locator('canvas').elementHandle();
+  await input.fill('draft / 草稿');
+  for (const locale of locales) {
+    await picker.selectOption(locale);
+    await expect(page.locator('html')).toHaveAttribute('lang', locale);
+    expect(await input.getAttribute('placeholder')).toContain(languages[locale].ball);
+    await expect(input).toHaveValue('draft / 草稿');
+    expect(page.url()).toBe(url);
+    expect(await picker.evaluate(el => {
+      const r = el.getBoundingClientRect();
+      return r.left >= 0 && r.right <= innerWidth && r.width >= 30;
+    })).toBe(true);
+  }
+  await picker.selectOption('en');
+  await page.locator('#art-trigger').click();
+  await expect(page.getByRole('checkbox', { name:'Rabbit sticker', exact:true })).toBeVisible();
+  await expect(page.getByText(/Choose pictures, then send/)).toContainText(languages.en.assets);
+  await page.getByRole('button', { name:'Finish choosing artwork' }).click();
+  await input.fill('  ' + languages.ja.ball + '  ');
+  await page.getByRole('button', { name:'Send', exact:true }).click();
+  await expect(app).toHaveAttribute('data-revision','1');
+  const records = () => request.get('/api/worlds/' + worldId + '/records').then(response => response.json());
+  const before = await records();
+  expect(before.snapshot.storyLocale).toBe('ja');
+  expect(before.snapshot.operations.map((op:{text?:string}) => op.text)).toContain(languages.ja.title);
+  expect(before.turns[0]).toMatchObject({text:'  ' + languages.ja.ball + '  ',ui_locale:'en'});
+  await picker.selectOption('de');
+  expect(await canvas!.evaluate(c => c === document.querySelector('canvas'))).toBe(true);
+  await page.reload();
+  await expect(picker).toHaveValue('de');
+  await expect(app).toHaveAttribute('data-version-id',before.snapshot.versionId);
+  expect((await records()).turns).toHaveLength(1);
+  await page.close();
+  await stop(); await start();
+  const context = await browser.newContext({ locale:'fr-CA', viewport:info.project.use.viewport });
+  try {
+    const restored = await context.newPage();
+    await restored.goto(url);
+    await expect(restored.locator('#app')).toHaveAttribute('data-version-id',before.snapshot.versionId);
+    await expect(restored.locator('.language-picker select')).toHaveValue('fr');
+    await restored.goto('/inspect/' + worldId);
+    await expect(restored.getByRole('heading', {name:'Archives du monde'})).toBeVisible();
+    const after = await records();
+    expect(after.snapshot).toEqual(before.snapshot);
+    expect(after.turns).toHaveLength(1); expect(after.attempts).toHaveLength(1);
+  } finally { await context.close(); }
 });

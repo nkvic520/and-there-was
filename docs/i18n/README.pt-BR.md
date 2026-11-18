@@ -12,13 +12,13 @@ Uma ideia vira um pequeno mundo. Uma tela para crianças e para os adultos que c
 - Crie imagens com o Seedream, escolha recursos gratuitos ou envie um desenho da criança.
 - Continue criando na mesma tela e volte à sua obra pelo link salvo.
 
-A interface do aplicativo está atualmente em chinês simplificado.
+A interface oferece dez idiomas. Ela segue as preferências do navegador e usa o inglês se não houver correspondência. O aparelho lembra a escolha feita no menu de idiomas. Cada mundo guarda o idioma da sua história.
 
 ## Experimente a demonstração
 
-Ainda não há uma demonstração pública hospedada. Execute o aplicativo localmente e envie **「有一个球」** (“Há uma bola”). O exemplo incluído não precisa de credenciais de modelos e reconhece exatamente essa frase em chinês.
+Execute o aplicativo localmente e envie **Tem uma bola** para experimentar sem chave. O endereço da demonstração pública será adicionado quando estiver disponível.
 
-Para experimentar imagens sem uma chave de modelo, escolha imagens em **素材／我的作品** e envie **「使用选中的素材」** (“Usar os recursos selecionados”).
+Para experimentar as imagens, escolha-as em **Imagens / meus desenhos** e envie **Use as imagens selecionadas**.
 
 ![Exemplo incluído: uma bola na tela](../../docs/media/ball.png)
 

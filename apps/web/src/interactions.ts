@@ -1,4 +1,5 @@
 import { addCalendarMonths, canonical, type InteractionReceipt, type ScenePackage, type TrialOutput, type WorldSnapshot } from '@and-there-was/scene';
+import type { Message } from './i18n';
 import { runIsolated } from './runtime';
 
 export const clientId = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
@@ -10,7 +11,7 @@ interface Host {
   api<T>(path: string, body?: unknown): Promise<T>;
   accept(snapshot: WorldSnapshot): Promise<void>;
   preview(snapshot: WorldSnapshot, count: number): void;
-  status(message: string): void;
+  status(message: Message): void;
 }
 export class InteractionQueue {
   private items: Intent[];
@@ -27,9 +28,9 @@ export class InteractionQueue {
   private save() { if (this.items.length) localStorage.setItem(this.key, JSON.stringify(this.items)); else localStorage.removeItem(this.key); }
   enqueue(targetId: string) {
     const snapshot = this.host.snapshot();
-    if (!snapshot.packageHash || this.items.length >= 100) { this.host.status('先等这些触碰保存好，再继续玩。'); return; }
+    if (!snapshot.packageHash || this.items.length >= 100) { this.host.status('waitTaps'); return; }
     this.items.push({ id: clientId(), targetId, packageHash: snapshot.packageHash, expiresAt: addCalendarMonths(new Date(), 3).toISOString() });
-    this.save(); void this.preview(); void this.flush().catch(() => this.host.status('触碰已记在本机，连上后会继续保存。'));
+    this.save(); void this.preview(); void this.flush().catch(() => this.host.status('offlineTaps'));
   }
   private async execute(snapshot: WorldSnapshot, targetId: string): Promise<TrialOutput> {
     const binding = snapshot.bindings?.find(value => value.targetId === targetId);
@@ -65,7 +66,7 @@ export class InteractionQueue {
         const baseline = await this.host.api<WorldSnapshot>(`/api/worlds/${this.host.worldId}`);
         if (baseline.packageHash !== item.packageHash) {
           this.items.shift(); this.save(); await this.host.accept(baseline); await this.preview();
-          this.host.status('世界已经更新，旧物体上的触碰没有应用到新世界。'); continue;
+          this.host.status('staleTap'); continue;
         }
         const receipt: InteractionReceipt = { clientEventId: item.id, versionId: baseline.versionId, revision: baseline.revision, targetId: item.targetId };
         try { receipt.output = await this.execute(baseline, item.targetId); }
@@ -79,7 +80,7 @@ export class InteractionQueue {
         throw error;
       }
       this.items.shift(); this.save(); ++this.previewSerial;
-      if ('failed' in result) this.host.status('这次触碰没有生效，原来的场景还在。');
+      if ('failed' in result) this.host.status('tapFailed');
       else await this.host.accept(result);
       await this.preview();
     }

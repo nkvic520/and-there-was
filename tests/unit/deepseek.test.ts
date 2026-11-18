@@ -66,3 +66,21 @@ it('accepts bounded large SSE envelopes for illustrated scenes but rejects overs
   const tooLarge=new DeepSeekGenerator({apiKey:'test-key',fetchImpl:async()=>new Response(streamReply('x'.repeat(200000)))});
   await expect(tooLarge.generate('漫画',baseline)).rejects.toThrow('content limit');
 });
+
+it('sends a target language and rejects an unrequested switch on a later turn', async () => {
+  const scene = {...baseline,storyLocale:'en' as const};
+  let replyLocale = 'fr';
+  let request: { language: { target:string; saved:string } } | undefined;
+  const generator = new DeepSeekGenerator({ apiKey:'test-key', fetchImpl:async (_url,init) => {
+    request = JSON.parse(JSON.parse(String(init?.body)).messages[1].content);
+    return new Response(streamReply(JSON.stringify({...JSON.parse(await modelReply()),storyLocale:replyLocale})));
+  }});
+  const context = {...trace().context,uiLocale:'zh-CN' as const};
+  await expect(generator.generate('让小兔跳一下',scene,context)).rejects.toThrow('quoted request');
+  expect(request?.language).toMatchObject({target:'en',saved:'en'});
+  replyLocale = 'ja';
+  expect((await generator.generate('用日语讲这个故事',scene,context)).storyLocale).toBe('ja');
+  expect(request?.language.target).toBe('ja');
+  replyLocale = 'en';
+  await expect(generator.generate('用日语讲这个故事',scene,context)).rejects.toThrow('explicitly requested');
+});

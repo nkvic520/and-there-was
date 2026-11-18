@@ -12,7 +12,7 @@ export async function modelReply(upgrade = false, mode?: WorldMode) {
   const pkg = await interactivePackage(upgrade);
   const protocol = JSON.parse(pkg.files['protocol.json']), view = JSON.parse(pkg.files['view.json']);
   if (mode) { protocol.schemaVersion=3; protocol.mode=mode; view.mode=mode; }
-  return JSON.stringify({ protocol, script: pkg.files['scene.js'], view });
+  return JSON.stringify({ storyLocale: 'zh-CN', protocol, script: pkg.files['scene.js'], view });
 }
 export async function animatedReply() {
   const value=JSON.parse(await modelReply(false,'animated'));
