@@ -82,4 +82,3 @@ The owner can open `/inspect/<worldId>` to view saved inputs, generated content 
 **Why can’t the phone connect?** Use the computer’s LAN address, make sure both devices can reach that network, and allow the app’s port through the computer’s firewall.
 
 **Why is generation failing?** Check the configured provider, model access and account balance. After updating keys or model settings, restart the service. The `/api/health` page shows the active model, without displaying the keys. A failed scene can be retried while keeping the last saved work.
-
